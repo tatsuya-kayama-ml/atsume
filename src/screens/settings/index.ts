@@ -1,0 +1,8 @@
+export { SettingsScreen } from './SettingsScreen';
+export { NotificationsScreen } from './NotificationsScreen';
+export { NotificationSettingsScreen } from './NotificationSettingsScreen';
+export { ProfileEditScreen } from './ProfileEditScreen';
+export { ChangePasswordScreen } from './ChangePasswordScreen';
+export { ContactScreen } from './ContactScreen';
+export { TermsOfServiceScreen } from './TermsOfServiceScreen';
+export { PrivacyPolicyScreen } from './PrivacyPolicyScreen';

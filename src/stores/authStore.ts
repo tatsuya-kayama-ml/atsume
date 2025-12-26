@@ -1,0 +1,361 @@
+import { create } from 'zustand';
+import { Platform } from 'react-native';
+import { supabase } from '../services/supabase';
+import { User } from '../types';
+
+// Get redirect URL based on platform
+const getPasswordResetRedirectUrl = (): string => {
+  if (Platform.OS === 'web') {
+    // For web, use the current origin
+    return typeof window !== 'undefined'
+      ? `${window.location.origin}/reset-password`
+      : 'http://localhost:8084/reset-password';
+  }
+  // For native apps, use deep link
+  return 'atsume://reset-password';
+};
+
+interface AuthState {
+  user: User | null;
+  session: any | null;
+  isLoading: boolean;
+  isInitialized: boolean;
+  isPasswordRecovery: boolean;
+  error: string | null;
+
+  // Actions
+  initialize: () => Promise<void>;
+  signUp: (email: string, password: string, displayName: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
+  updateProfile: (data: Partial<Pick<User, 'display_name' | 'skill_level'>>) => Promise<void>;
+  updateAvatar: (imageUri: string) => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  clearError: () => void;
+  clearPasswordRecovery: () => void;
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
+  user: null,
+  session: null,
+  isLoading: false,
+  isInitialized: false,
+  isPasswordRecovery: false,
+  error: null,
+
+  initialize: async () => {
+    try {
+      set({ isLoading: true });
+
+      // Get current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) throw sessionError;
+
+      if (session?.user) {
+        // Fetch user profile from users table
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (userError && userError.code !== 'PGRST116') {
+          throw userError;
+        }
+
+        set({
+          session,
+          user: userData || null,
+          isInitialized: true,
+          isLoading: false
+        });
+      } else {
+        set({
+          session: null,
+          user: null,
+          isInitialized: true,
+          isLoading: false
+        });
+      }
+
+      // Listen for auth changes
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('[Auth] Auth state changed:', event);
+
+        if (event === 'PASSWORD_RECOVERY') {
+          // User clicked password reset link
+          set({ isPasswordRecovery: true, session });
+        } else if (event === 'SIGNED_IN' && session?.user) {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          set({ session, user: userData || null });
+        } else if (event === 'SIGNED_OUT') {
+          set({ session: null, user: null, isPasswordRecovery: false });
+        }
+      });
+    } catch (error: any) {
+      set({
+        error: error.message,
+        isInitialized: true,
+        isLoading: false
+      });
+    }
+  },
+
+  signUp: async (email: string, password: string, displayName: string) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      // Sign up with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        // Create user profile in users table
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .insert({
+            id: authData.user.id,
+            email,
+            display_name: displayName,
+            skill_level: 3, // Default to intermediate
+          })
+          .select()
+          .single();
+
+        if (userError) throw userError;
+
+        set({
+          user: userData,
+          session: authData.session,
+          isLoading: false
+        });
+      }
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  signIn: async (email: string, password: string) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      console.log('[Auth] Signing in with email:', email);
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      console.log('[Auth] Sign in result:', { data: data?.user?.id, error });
+
+      if (error) throw error;
+
+      if (data.user) {
+        console.log('[Auth] Fetching user profile for:', data.user.id);
+
+        // Fetch user profile
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+
+        console.log('[Auth] User profile result:', { userData, userError });
+
+        if (userError && userError.code !== 'PGRST116') {
+          throw userError;
+        }
+
+        set({
+          user: userData || null,
+          session: data.session,
+          isLoading: false
+        });
+
+        console.log('[Auth] Sign in complete');
+      }
+    } catch (error: any) {
+      console.error('[Auth] Sign in error:', error);
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  signOut: async () => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+
+      set({ user: null, session: null, isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  resetPassword: async (email: string) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: getPasswordResetRedirectUrl(),
+      });
+
+      if (error) throw error;
+
+      set({ isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  updateProfile: async (data: Partial<Pick<User, 'display_name' | 'skill_level'>>) => {
+    try {
+      const { user } = get();
+      if (!user) throw new Error('ユーザーがログインしていません');
+
+      set({ isLoading: true, error: null });
+
+      const { data: updatedUser, error } = await supabase
+        .from('users')
+        .update(data)
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      set({ user: updatedUser, isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  updateAvatar: async (imageUri: string) => {
+    try {
+      const { user } = get();
+      if (!user) throw new Error('ユーザーがログインしていません');
+
+      set({ isLoading: true, error: null });
+
+      // Generate unique file name
+      const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      // Convert URI to blob for upload
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, blob, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: `image/${fileExt}`,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const avatarUrl = urlData.publicUrl;
+
+      // Update user profile with new avatar URL
+      const { data: updatedUser, error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: avatarUrl })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      set({ user: updatedUser, isLoading: false });
+    } catch (error: any) {
+      console.error('[Auth] Avatar update error:', error);
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  updatePassword: async (newPassword: string) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) throw error;
+
+      // Sign out after password update so user can log in with new password
+      await supabase.auth.signOut();
+
+      set({
+        isLoading: false,
+        isPasswordRecovery: false,
+        user: null,
+        session: null,
+      });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  deleteAccount: async () => {
+    try {
+      const { user } = get();
+      if (!user) throw new Error('ユーザーがログインしていません');
+
+      set({ isLoading: true, error: null });
+
+      // Delete user's data from database
+      // Note: In a real app, you might want to use a database function
+      // that handles cascading deletes properly
+      const { error: deleteError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', user.id);
+
+      if (deleteError) throw deleteError;
+
+      // Sign out the user
+      await supabase.auth.signOut();
+
+      set({
+        user: null,
+        session: null,
+        isLoading: false,
+      });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  clearError: () => set({ error: null }),
+  clearPasswordRecovery: () => set({ isPasswordRecovery: false }),
+}));
