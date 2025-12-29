@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Platform, Appearance } from 'react-native';
+
+export type ThemeMode = 'light' | 'dark' | 'system';
 
 interface NotificationSettings {
   pushEnabled: boolean;
@@ -13,6 +15,8 @@ interface NotificationSettings {
 
 interface SettingsState {
   notifications: NotificationSettings;
+  themeMode: ThemeMode;
+  isDarkMode: boolean;
 
   // Actions
   updateNotificationSettings: (settings: Partial<NotificationSettings>) => void;
@@ -21,6 +25,8 @@ interface SettingsState {
   toggleEventReminders: () => void;
   togglePaymentReminders: () => void;
   toggleEventUpdates: () => void;
+  setThemeMode: (mode: ThemeMode) => void;
+  updateSystemTheme: () => void;
 }
 
 const defaultNotificationSettings: NotificationSettings = {
@@ -31,10 +37,18 @@ const defaultNotificationSettings: NotificationSettings = {
   eventUpdates: true,
 };
 
+// Get system dark mode preference
+const getSystemIsDark = (): boolean => {
+  const colorScheme = Appearance.getColorScheme();
+  return colorScheme === 'dark';
+};
+
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       notifications: defaultNotificationSettings,
+      themeMode: 'system' as ThemeMode,
+      isDarkMode: getSystemIsDark(),
 
       updateNotificationSettings: (settings) =>
         set((state) => ({
@@ -80,6 +94,25 @@ export const useSettingsStore = create<SettingsState>()(
             eventUpdates: !state.notifications.eventUpdates,
           },
         })),
+
+      setThemeMode: (mode: ThemeMode) =>
+        set(() => {
+          let isDark: boolean;
+          if (mode === 'system') {
+            isDark = getSystemIsDark();
+          } else {
+            isDark = mode === 'dark';
+          }
+          return { themeMode: mode, isDarkMode: isDark };
+        }),
+
+      updateSystemTheme: () =>
+        set((state) => {
+          if (state.themeMode === 'system') {
+            return { isDarkMode: getSystemIsDark() };
+          }
+          return {};
+        }),
     }),
     {
       name: 'atsume-settings',
@@ -88,6 +121,20 @@ export const useSettingsStore = create<SettingsState>()(
           ? localStorage
           : AsyncStorage
       ),
+      partialize: (state) => ({
+        notifications: state.notifications,
+        themeMode: state.themeMode,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          // Update isDarkMode based on stored themeMode after rehydration
+          if (state.themeMode === 'system') {
+            state.isDarkMode = getSystemIsDark();
+          } else {
+            state.isDarkMode = state.themeMode === 'dark';
+          }
+        }
+      },
     }
   )
 );

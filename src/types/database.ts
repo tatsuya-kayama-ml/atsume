@@ -3,9 +3,15 @@
 export type AttendanceStatus = 'pending' | 'attending' | 'not_attending' | 'maybe';
 export type PaymentStatus = 'unpaid' | 'pending_confirmation' | 'paid';
 export type EventStatus = 'draft' | 'open' | 'closed' | 'in_progress' | 'completed';
-export type TournamentFormat = 'tournament' | 'round_robin' | 'league';
+export type TournamentFormat =
+  | 'single_elimination'      // シングルエリミネーション（従来のトーナメント）
+  | 'double_elimination'      // ダブルエリミネーション
+  | 'round_robin'            // 総当たり戦（リーグ戦）
+  | 'swiss'                  // スイスドロー方式
+  | 'group_stage';           // グループステージ
 export type MatchStatus = 'scheduled' | 'in_progress' | 'completed';
 export type TimerPosition = 'top' | 'bottom';
+export type CompetitionType = 'team' | 'individual'; // 団体戦 or 個人戦
 
 export interface User {
   id: string;
@@ -74,10 +80,14 @@ export interface EventParticipant {
   payment_confirmed_at: string | null;
   skill_level: number | null;
   gender: GenderType | null;
+  actual_attendance: boolean | null; // 実際の出席状況 (null=未確認, true=出席, false=欠席)
+  checked_in_at: string | null; // 出席確認日時
   created_at: string;
   updated_at: string;
   // Joined fields
   user?: User;
+  display_name?: string; // 手動追加参加者用
+  is_manual?: boolean; // 手動追加フラグ
 }
 
 export interface Team {
@@ -113,14 +123,29 @@ export interface Tournament {
 }
 
 export interface TournamentSettings {
+  competition_type?: CompetitionType; // 競技タイプ (team or individual)
   team_count?: number;
   has_third_place_match?: boolean;
+
+  // Scoring settings
   win_points?: number;
   draw_points?: number;
   loss_points?: number;
+
+  // Group stage settings
   groups?: number;
   teams_per_group?: number;
   advancing_teams?: number;
+
+  // Swiss system settings
+  swiss_rounds?: number; // スイスドロー方式のラウンド数
+
+  // Display settings
+  enable_score_tracking?: boolean; // 試合結果記録を有効にするか
+  enable_standings?: boolean; // 順位表を有効にするか
+
+  // Bracket settings
+  losers_bracket_enabled?: boolean; // ダブルエリミネーション用の敗者復活戦
 }
 
 export interface Match {
@@ -136,6 +161,7 @@ export interface Match {
   winner_id: string | null;
   status: MatchStatus;
   scheduled_time: string | null;
+  bracket_type?: 'winners' | 'losers' | 'finals'; // ダブルエリミネーション用
   created_at: string;
   updated_at: string;
   // Joined fields

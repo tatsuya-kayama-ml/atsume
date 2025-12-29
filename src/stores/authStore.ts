@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { Platform } from 'react-native';
 import { supabase } from '../services/supabase';
 import { User } from '../types';
+import { logger } from '../utils';
 
 // Get redirect URL based on platform
 const getPasswordResetRedirectUrl = (): string => {
@@ -83,7 +84,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // Listen for auth changes
       supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('[Auth] Auth state changed:', event);
+        logger.log('[Auth] Auth state changed:', event);
 
         if (event === 'PASSWORD_RECOVERY') {
           // User clicked password reset link
@@ -152,19 +153,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      console.log('[Auth] Signing in with email:', email);
+      logger.log('[Auth] Signing in');
 
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      console.log('[Auth] Sign in result:', { data: data?.user?.id, error });
+      logger.log('[Auth] Sign in result:', { userId: data?.user?.id, error: error?.message });
 
       if (error) throw error;
 
       if (data.user) {
-        console.log('[Auth] Fetching user profile for:', data.user.id);
+        logger.log('[Auth] Fetching user profile');
 
         // Fetch user profile
         const { data: userData, error: userError } = await supabase
@@ -173,7 +174,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           .eq('id', data.user.id)
           .single();
 
-        console.log('[Auth] User profile result:', { userData, userError });
+        logger.log('[Auth] User profile fetched:', { hasData: !!userData, error: userError?.message });
 
         if (userError && userError.code !== 'PGRST116') {
           throw userError;
@@ -185,10 +186,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isLoading: false
         });
 
-        console.log('[Auth] Sign in complete');
+        logger.log('[Auth] Sign in complete');
       }
     } catch (error: any) {
-      console.error('[Auth] Sign in error:', error);
+      logger.error('[Auth] Sign in error:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }
@@ -294,7 +295,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       set({ user: updatedUser, isLoading: false });
     } catch (error: any) {
-      console.error('[Auth] Avatar update error:', error);
+      logger.error('[Auth] Avatar update error:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }

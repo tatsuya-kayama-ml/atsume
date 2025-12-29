@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import { Event, EventParticipant, EventStatus, AttendanceStatus, PaymentStatus, SkillLevelSettings, GenderSettings, GenderType } from '../types';
+import { hashPassword, verifyPassword, logger } from '../utils';
 
 interface EventState {
   events: Event[];
@@ -23,11 +24,18 @@ interface EventState {
   joinEvent: (eventId: string, code?: string, password?: string) => Promise<void>;
   joinEventByCode: (code: string, password?: string) => Promise<void>;
   leaveEvent: (eventId: string) => Promise<void>;
+  addManualParticipant: (eventId: string, name: string, options?: { attendanceStatus?: AttendanceStatus; paymentStatus?: PaymentStatus; skillLevel?: number; gender?: GenderType }) => Promise<void>;
+  updateManualParticipant: (participantId: string, data: { display_name?: string; attendance_status?: AttendanceStatus; payment_status?: PaymentStatus; skill_level?: number; gender?: GenderType }) => Promise<void>;
+  removeParticipant: (participantId: string) => Promise<void>;
   updateAttendanceStatus: (participantId: string, status: AttendanceStatus) => Promise<void>;
   updatePaymentStatus: (participantId: string, status: PaymentStatus) => Promise<void>;
   updateParticipantProfile: (participantId: string, data: { skill_level?: number; gender?: GenderType }) => Promise<void>;
   reportPayment: (participantId: string) => Promise<void>;
   confirmPayment: (participantId: string) => Promise<void>;
+
+  // Actual attendance (check-in)
+  checkInParticipant: (participantId: string, attended: boolean) => Promise<void>;
+  bulkCheckIn: (participantIds: string[], attended: boolean) => Promise<void>;
 
   // Utility
   clearError: () => void;
@@ -133,14 +141,17 @@ export const useEventStore = create<EventState>((set, get) => ({
     try {
       set({ isLoading: true, error: null });
 
-      console.log('[EventStore] createEvent called with:', data);
+      logger.log('[EventStore] createEvent called');
 
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('[EventStore] Current user:', user?.id);
+      logger.log('[EventStore] Current user:', user?.id);
       if (!user) throw new Error('ログインしていません');
 
       const eventCode = generateEventCode();
       const inviteLink = `atsume://event/${eventCode}`;
+
+      // Hash password if provided
+      const passwordHash = data.password ? await hashPassword(data.password) : null;
 
       const insertData = {
         organizer_id: user.id,
@@ -151,14 +162,14 @@ export const useEventStore = create<EventState>((set, get) => ({
         fee: data.fee,
         capacity: data.capacity || null,
         event_code: eventCode,
-        password_hash: data.password || null, // In production, hash this
+        password_hash: passwordHash,
         invite_link: inviteLink,
         status: 'open' as EventStatus,
         timer_position: 'bottom',
         skill_level_settings: data.skill_level_settings || null,
         gender_settings: data.gender_settings || null,
       };
-      console.log('[EventStore] Inserting event:', insertData);
+      logger.log('[EventStore] Inserting event');
 
       const { data: event, error } = await supabase
         .from('events')
@@ -166,7 +177,7 @@ export const useEventStore = create<EventState>((set, get) => ({
         .select()
         .single();
 
-      console.log('[EventStore] Insert result:', { event, error });
+      logger.log('[EventStore] Insert result:', { eventId: event?.id, error });
 
       if (error) throw error;
 
@@ -177,7 +188,7 @@ export const useEventStore = create<EventState>((set, get) => ({
 
       return event;
     } catch (error: any) {
-      console.error('[EventStore] createEvent error:', error);
+      logger.error('[EventStore] createEvent error:', error);
       set({ error: error.message, isLoading: false });
       throw error;
     }
@@ -279,8 +290,15 @@ export const useEventStore = create<EventState>((set, get) => ({
 
       if (eventError) throw new Error('イベントが見つかりません');
 
-      if (event.password_hash && event.password_hash !== password) {
-        throw new Error('パスワードが正しくありません');
+      // Verify password if event has one
+      if (event.password_hash) {
+        if (!password) {
+          throw new Error('パスワードが必要です');
+        }
+        const isValidPassword = await verifyPassword(password, event.password_hash);
+        if (!isValidPassword) {
+          throw new Error('パスワードが正しくありません');
+        }
       }
 
       // Check if already participating
@@ -365,6 +383,96 @@ export const useEventStore = create<EventState>((set, get) => ({
 
       set({ isLoading: false });
       await get().fetchMyEvents();
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  addManualParticipant: async (eventId: string, name: string, options?: { attendanceStatus?: AttendanceStatus; paymentStatus?: PaymentStatus; skillLevel?: number; gender?: GenderType }) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('ログインしていません');
+
+      // Check if user is the organizer
+      const { data: event } = await supabase
+        .from('events')
+        .select('organizer_id')
+        .eq('id', eventId)
+        .single();
+
+      if (!event || event.organizer_id !== user.id) {
+        throw new Error('主催者のみ手動で参加者を追加できます');
+      }
+
+      // Insert manual participant (user_id is null for manual entries)
+      const { data: participant, error } = await supabase
+        .from('event_participants')
+        .insert({
+          event_id: eventId,
+          user_id: null,
+          display_name: name,
+          attendance_status: options?.attendanceStatus || 'attending',
+          payment_status: options?.paymentStatus || 'unpaid',
+          skill_level: options?.skillLevel || null,
+          gender: options?.gender || null,
+          is_manual: true,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      set((state) => ({
+        participants: [...state.participants, { ...participant, user: null }],
+        isLoading: false,
+      }));
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  updateManualParticipant: async (participantId: string, data: { display_name?: string; attendance_status?: AttendanceStatus; payment_status?: PaymentStatus; skill_level?: number; gender?: GenderType }) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const { error } = await supabase
+        .from('event_participants')
+        .update(data)
+        .eq('id', participantId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        participants: state.participants.map((p) =>
+          p.id === participantId ? { ...p, ...data } : p
+        ),
+        isLoading: false,
+      }));
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  removeParticipant: async (participantId: string) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const { error } = await supabase
+        .from('event_participants')
+        .delete()
+        .eq('id', participantId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        participants: state.participants.filter((p) => p.id !== participantId),
+        isLoading: false,
+      }));
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;
@@ -556,6 +664,67 @@ export const useEventStore = create<EventState>((set, get) => ({
       }));
 
       return newEvent;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  checkInParticipant: async (participantId: string, attended: boolean) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const { error } = await supabase
+        .from('event_participants')
+        .update({
+          actual_attendance: attended,
+          checked_in_at: new Date().toISOString(),
+        })
+        .eq('id', participantId);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        participants: state.participants.map((p) =>
+          p.id === participantId
+            ? { ...p, actual_attendance: attended, checked_in_at: new Date().toISOString() }
+            : p
+        ),
+        isLoading: false,
+      }));
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  bulkCheckIn: async (participantIds: string[], attended: boolean) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const now = new Date().toISOString();
+
+      // Update all participants at once
+      const { error } = await supabase
+        .from('event_participants')
+        .update({
+          actual_attendance: attended,
+          checked_in_at: now,
+        })
+        .in('id', participantIds);
+
+      if (error) throw error;
+
+      // Update local state
+      set((state) => ({
+        participants: state.participants.map((p) =>
+          participantIds.includes(p.id)
+            ? { ...p, actual_attendance: attended, checked_in_at: now }
+            : p
+        ),
+        isLoading: false,
+      }));
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;

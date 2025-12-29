@@ -42,14 +42,17 @@ import {
   UserCheck,
   UserX,
   CircleDollarSign,
+  UserPlus,
 } from 'lucide-react-native';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Card, Badge, Avatar } from '../../components/common';
-import { ReminderModal } from '../../components/events';
+import { ReminderModal, AddParticipantModal } from '../../components/events';
+import { TeamsTab } from '../../components/teams';
+import { MatchesTab } from '../../components/matches';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
-import { RootStackParamList, EventTabParamList, AttendanceStatus } from '../../types';
+import { RootStackParamList, EventTabParamList, AttendanceStatus, PaymentStatus, GenderType } from '../../types';
 
 const { width } = Dimensions.get('window');
 const Tab = createMaterialTopTabNavigator<EventTabParamList>();
@@ -399,8 +402,11 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
 // Participants Tab
 const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
-  const { participants, currentEvent, fetchParticipants, updateAttendanceStatus, updateParticipantProfile, isLoading } = useEventStore();
+  const { participants, currentEvent, fetchParticipants, updateAttendanceStatus, updateParticipantProfile, addManualParticipant, checkInParticipant, isLoading } = useEventStore();
   const { user } = useAuthStore();
+  const { showToast } = useToast();
+  const [showAddModal, setShowAddModal] = React.useState(false);
+  const [checkInMode, setCheckInMode] = React.useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -409,6 +415,24 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   );
 
   const isOrganizer = currentEvent?.organizer_id === user?.id;
+
+  const handleAddParticipant = async (
+    name: string,
+    options: {
+      attendanceStatus: AttendanceStatus;
+      paymentStatus: PaymentStatus;
+      skillLevel?: number;
+      gender?: GenderType;
+    }
+  ) => {
+    try {
+      await addManualParticipant(eventId, name, options);
+      showToast(`${name}さんを追加しました`, 'success');
+    } catch (error: any) {
+      showToast(error.message || '追加に失敗しました', 'error');
+      throw error;
+    }
+  };
 
   const getStatusConfig = (status: AttendanceStatus): { color: 'success' | 'error' | 'warning' | 'default'; label: string; icon: string; colorValue: string } => {
     switch (status) {
@@ -428,6 +452,15 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
       await updateAttendanceStatus(participantId, status);
     } catch (error: any) {
       Alert.alert('エラー', error.message);
+    }
+  };
+
+  const handleCheckIn = async (participantId: string, attended: boolean) => {
+    try {
+      await checkInParticipant(participantId, attended);
+      showToast(attended ? '出席を記録しました' : '欠席を記録しました', 'success');
+    } catch (error: any) {
+      showToast(error.message || 'チェックインに失敗しました', 'error');
     }
   };
 
@@ -452,6 +485,34 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
       }
       showsVerticalScrollIndicator={false}
     >
+      {/* Join Event Card (Not Participating) */}
+      {!myParticipation && !isOrganizer && (
+        <Card variant="elevated" style={styles.joinEventCard}>
+          <View style={styles.joinEventIconContainer}>
+            <UserPlus size={32} color={colors.primary} />
+          </View>
+          <Text style={styles.joinEventTitle}>まだ参加していません</Text>
+          <Text style={styles.joinEventMessage}>
+            このイベントに参加して出欠を登録しましょう
+          </Text>
+          <Button
+            title="イベントに参加する"
+            onPress={async () => {
+              try {
+                await useEventStore.getState().joinEvent(eventId);
+                await fetchParticipants(eventId);
+                showToast('イベントに参加しました', 'success');
+              } catch (error: any) {
+                showToast(error.message || '参加に失敗しました', 'error');
+              }
+            }}
+            icon={<UserPlus size={18} color={colors.white} />}
+            fullWidth
+            size="lg"
+          />
+        </Card>
+      )}
+
       {/* My Status Card */}
       {myParticipation && !isOrganizer && (
         <Card variant="elevated" style={styles.myStatusCard}>
@@ -565,25 +626,98 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         </Card>
       )}
 
+      {/* Check-in Mode Toggle (Organizer Only) */}
+      {isOrganizer && (
+        <TouchableOpacity
+          style={[styles.checkInModeToggleButton, checkInMode && styles.checkInModeToggleButtonActive]}
+          onPress={() => setCheckInMode(!checkInMode)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.checkInModeToggleContent}>
+            <View style={[styles.checkInModeIcon, checkInMode && styles.checkInModeIconActive]}>
+              <Text style={styles.checkInModeIconText}>{checkInMode ? '✓' : '○'}</Text>
+            </View>
+            <View style={styles.checkInModeTextContainer}>
+              <Text style={[styles.checkInModeToggleTitle, checkInMode && styles.checkInModeToggleTitleActive]}>
+                出席確認モード
+              </Text>
+              <Text style={[styles.checkInModeToggleSubtitle, checkInMode && styles.checkInModeToggleSubtitleActive]}>
+                {checkInMode ? '出席/欠席をチェック中' : 'タップしてモードを開始'}
+              </Text>
+            </View>
+            <View style={[styles.checkInModeBadge, checkInMode && styles.checkInModeBadgeActive]}>
+              <Text style={[styles.checkInModeBadgeText, checkInMode && styles.checkInModeBadgeTextActive]}>
+                {checkInMode ? 'ON' : 'OFF'}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      )}
+
       {/* Summary Stats */}
-      <View style={styles.participantSummary}>
-        <View style={[styles.summaryItem, { backgroundColor: colors.successSoft }]}>
-          <Text style={[styles.summaryCount, { color: colors.success }]}>{attendingParticipants.length}</Text>
-          <Text style={styles.summaryLabel}>出席</Text>
+      <Card variant="elevated" style={styles.summaryCard}>
+        <Text style={styles.summaryCardTitle}>出席予定</Text>
+        <View style={styles.participantSummary}>
+          <View style={styles.summaryItem}>
+            <View style={[styles.summaryIconCircle, { backgroundColor: colors.successSoft }]}>
+              <Text style={[styles.summaryCount, { color: colors.success }]}>{attendingParticipants.length}</Text>
+            </View>
+            <Text style={styles.summaryLabel}>出席予定</Text>
+          </View>
+          <View style={styles.summaryItem}>
+            <View style={[styles.summaryIconCircle, { backgroundColor: colors.warningSoft }]}>
+              <Text style={[styles.summaryCount, { color: colors.warning }]}>{maybeParticipants.length}</Text>
+            </View>
+            <Text style={styles.summaryLabel}>未定</Text>
+          </View>
+          <View style={styles.summaryItem}>
+            <View style={[styles.summaryIconCircle, { backgroundColor: colors.errorSoft }]}>
+              <Text style={[styles.summaryCount, { color: colors.error }]}>{notAttendingParticipants.length}</Text>
+            </View>
+            <Text style={styles.summaryLabel}>欠席予定</Text>
+          </View>
+          <View style={styles.summaryItem}>
+            <View style={[styles.summaryIconCircle, { backgroundColor: colors.gray[100] }]}>
+              <Text style={[styles.summaryCount, { color: colors.gray[500] }]}>{pendingParticipants.length}</Text>
+            </View>
+            <Text style={styles.summaryLabel}>未回答</Text>
+          </View>
         </View>
-        <View style={[styles.summaryItem, { backgroundColor: colors.warningSoft }]}>
-          <Text style={[styles.summaryCount, { color: colors.warning }]}>{maybeParticipants.length}</Text>
-          <Text style={styles.summaryLabel}>未定</Text>
-        </View>
-        <View style={[styles.summaryItem, { backgroundColor: colors.errorSoft }]}>
-          <Text style={[styles.summaryCount, { color: colors.error }]}>{notAttendingParticipants.length}</Text>
-          <Text style={styles.summaryLabel}>欠席</Text>
-        </View>
-        <View style={[styles.summaryItem, { backgroundColor: colors.gray[100] }]}>
-          <Text style={[styles.summaryCount, { color: colors.gray[500] }]}>{pendingParticipants.length}</Text>
-          <Text style={styles.summaryLabel}>未回答</Text>
-        </View>
-      </View>
+
+        {/* Actual Attendance Summary (Organizer Only, Check-in Mode) */}
+        {isOrganizer && checkInMode && (
+          <>
+            <View style={styles.summaryDivider} />
+            <Text style={styles.summaryCardTitle}>実際の出席状況</Text>
+            <View style={styles.participantSummary}>
+              <View style={styles.summaryItem}>
+                <View style={[styles.summaryIconCircle, { backgroundColor: colors.successSoft }]}>
+                  <Text style={[styles.summaryCount, { color: colors.success }]}>
+                    {participants.filter(p => p.actual_attendance === true).length}
+                  </Text>
+                </View>
+                <Text style={styles.summaryLabel}>実出席</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <View style={[styles.summaryIconCircle, { backgroundColor: colors.errorSoft }]}>
+                  <Text style={[styles.summaryCount, { color: colors.error }]}>
+                    {participants.filter(p => p.actual_attendance === false).length}
+                  </Text>
+                </View>
+                <Text style={styles.summaryLabel}>実欠席</Text>
+              </View>
+              <View style={styles.summaryItem}>
+                <View style={[styles.summaryIconCircle, { backgroundColor: colors.gray[100] }]}>
+                  <Text style={[styles.summaryCount, { color: colors.gray[500] }]}>
+                    {participants.filter(p => p.actual_attendance === null).length}
+                  </Text>
+                </View>
+                <Text style={styles.summaryLabel}>未確認</Text>
+              </View>
+            </View>
+          </>
+        )}
+      </Card>
 
       {/* Participant Groups */}
       {attendingParticipants.length > 0 && (
@@ -600,6 +734,8 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="attending"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
+              checkInMode={checkInMode && isOrganizer}
+              onCheckIn={handleCheckIn}
             />
           ))}
         </View>
@@ -619,6 +755,8 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="maybe"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
+              checkInMode={checkInMode && isOrganizer}
+              onCheckIn={handleCheckIn}
             />
           ))}
         </View>
@@ -638,6 +776,8 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="not_attending"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
+              checkInMode={checkInMode && isOrganizer}
+              onCheckIn={handleCheckIn}
             />
           ))}
         </View>
@@ -657,10 +797,38 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="pending"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
+              checkInMode={checkInMode && isOrganizer}
+              onCheckIn={handleCheckIn}
             />
           ))}
         </View>
       )}
+
+      {/* Add Participant Button (Organizer Only) */}
+      {isOrganizer && (
+        <TouchableOpacity
+          style={styles.addParticipantButton}
+          onPress={() => setShowAddModal(true)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.addParticipantIcon}>
+            <UserPlus size={20} color={colors.primary} />
+          </View>
+          <View>
+            <Text style={styles.addParticipantTitle}>参加者を手動で追加</Text>
+            <Text style={styles.addParticipantSubtitle}>アプリ未登録の方を追加できます</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      {/* Add Participant Modal */}
+      <AddParticipantModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={handleAddParticipant}
+        skillLevelSettings={currentEvent?.skill_level_settings}
+        genderSettings={currentEvent?.gender_settings}
+      />
     </ScrollView>
   );
 };
@@ -671,9 +839,14 @@ const ParticipantCard: React.FC<{
   status: AttendanceStatus;
   skillLevelSettings?: any;
   genderSettings?: any;
-}> = ({ participant, status, skillLevelSettings, genderSettings }) => {
-  const displayName = participant.user?.display_name || '名前未設定';
+  checkInMode?: boolean;
+  onCheckIn?: (participantId: string, attended: boolean) => void;
+}> = ({ participant, status, skillLevelSettings, genderSettings, checkInMode = false, onCheckIn }) => {
+  // For manual participants, use display_name directly; for registered users, use user.display_name
+  const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
   const avatarUrl = participant.user?.avatar_url;
+  const isManual = participant.is_manual || !participant.user_id;
+  const actualAttendance = participant.actual_attendance;
 
   // Get skill level label
   const skillLevelLabel = skillLevelSettings?.enabled && participant.skill_level
@@ -691,9 +864,14 @@ const ParticipantCard: React.FC<{
       <View style={styles.participantInfo}>
         <View style={styles.participantNameRow}>
           <Text style={styles.participantName}>{displayName}</Text>
-          {participant.payment_status === 'paid' && (
-            <Badge label="支払済" color="success" size="sm" variant="soft" />
-          )}
+          <View style={styles.participantBadgesInline}>
+            {isManual && (
+              <Badge label="手動" color="default" size="sm" variant="soft" />
+            )}
+            {participant.payment_status === 'paid' && (
+              <Badge label="支払済" color="success" size="sm" variant="soft" />
+            )}
+          </View>
         </View>
         {(skillLevelLabel || genderLabel) && (
           <View style={styles.participantBadgesRow}>
@@ -707,6 +885,53 @@ const ParticipantCard: React.FC<{
                 <Text style={styles.participantSmallBadgeText}>{genderLabel}</Text>
               </View>
             )}
+          </View>
+        )}
+        {checkInMode && onCheckIn && (
+          <View style={styles.checkInButtons}>
+            <TouchableOpacity
+              style={[
+                styles.checkInButton,
+                styles.checkInButtonPresent,
+                actualAttendance === true && styles.checkInButtonActive,
+              ]}
+              onPress={() => onCheckIn(participant.id, true)}
+            >
+              <Text
+                style={[
+                  styles.checkInButtonText,
+                  actualAttendance === true && styles.checkInButtonTextActive,
+                ]}
+              >
+                ✓ 出席
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.checkInButton,
+                styles.checkInButtonAbsent,
+                actualAttendance === false && styles.checkInButtonActive,
+              ]}
+              onPress={() => onCheckIn(participant.id, false)}
+            >
+              <Text
+                style={[
+                  styles.checkInButtonText,
+                  actualAttendance === false && styles.checkInButtonTextActive,
+                ]}
+              >
+                ✕ 欠席
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {!checkInMode && actualAttendance !== null && (
+          <View style={styles.actualAttendanceBadge}>
+            <Badge
+              label={actualAttendance ? '実出席' : '実欠席'}
+              color={actualAttendance ? 'success' : 'error'}
+              size="sm"
+            />
           </View>
         )}
       </View>
@@ -892,33 +1117,39 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             <Text style={styles.paymentGroupTitle}>確認待ち</Text>
             <Text style={styles.paymentGroupCount}>{pendingConfirmation.length}人</Text>
           </View>
-          {pendingConfirmation.map((participant) => (
-            <View key={participant.id} style={styles.paymentItem}>
-              <View style={styles.paymentItemLeft}>
-                <Avatar
-                  name={participant.user?.display_name || '名前未設定'}
-                  imageUrl={participant.user?.avatar_url || undefined}
-                  size="md"
-                />
-                <View style={styles.paymentItemInfo}>
-                  <Text style={styles.paymentItemName}>
-                    {participant.user?.display_name || '名前未設定'}
-                  </Text>
-                  <Badge label="確認待ち" color="warning" size="sm" variant="soft" />
+          {pendingConfirmation.map((participant) => {
+            const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
+            const avatarUrl = participant.user?.avatar_url;
+            return (
+              <View key={participant.id} style={styles.paymentItem}>
+                <View style={styles.paymentItemLeft}>
+                  <Avatar
+                    name={displayName}
+                    imageUrl={avatarUrl || undefined}
+                    size="md"
+                  />
+                  <View style={styles.paymentItemInfo}>
+                    <Text style={styles.paymentItemName}>
+                      {displayName}
+                    </Text>
+                    <View style={styles.paymentItemBadges}>
+                      <Badge label="確認待ち" color="warning" size="sm" variant="soft" />
+                      {participant.is_manual && (
+                        <Badge label="手動" color="default" size="sm" variant="soft" />
+                      )}
+                    </View>
+                  </View>
                 </View>
+                <TouchableOpacity
+                  style={styles.confirmPaymentButton}
+                  onPress={() => handleConfirmPayment(participant.id, displayName)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.confirmPaymentButtonText}>確認</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                style={styles.confirmPaymentButton}
-                onPress={() => handleConfirmPayment(
-                  participant.id,
-                  participant.user?.display_name || '名前未設定'
-                )}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.confirmPaymentButtonText}>確認</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
+            );
+          })}
         </View>
       )}
 
@@ -930,24 +1161,33 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             <Text style={styles.paymentGroupTitle}>支払い済み</Text>
             <Text style={styles.paymentGroupCount}>{paidParticipants.length}人</Text>
           </View>
-          {paidParticipants.map((participant) => (
-            <View key={participant.id} style={styles.paymentItem}>
-              <View style={styles.paymentItemLeft}>
-                <Avatar
-                  name={participant.user?.display_name || '名前未設定'}
-                  imageUrl={participant.user?.avatar_url || undefined}
-                  size="md"
-                />
-                <View style={styles.paymentItemInfo}>
-                  <Text style={styles.paymentItemName}>
-                    {participant.user?.display_name || '名前未設定'}
-                  </Text>
-                  <Badge label="支払済" color="success" size="sm" variant="soft" />
+          {paidParticipants.map((participant) => {
+            const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
+            const avatarUrl = participant.user?.avatar_url;
+            return (
+              <View key={participant.id} style={styles.paymentItem}>
+                <View style={styles.paymentItemLeft}>
+                  <Avatar
+                    name={displayName}
+                    imageUrl={avatarUrl || undefined}
+                    size="md"
+                  />
+                  <View style={styles.paymentItemInfo}>
+                    <Text style={styles.paymentItemName}>
+                      {displayName}
+                    </Text>
+                    <View style={styles.paymentItemBadges}>
+                      <Badge label="支払済" color="success" size="sm" variant="soft" />
+                      {participant.is_manual && (
+                        <Badge label="手動" color="default" size="sm" variant="soft" />
+                      )}
+                    </View>
+                  </View>
                 </View>
+                <Text style={styles.paidAmount}>¥{currentEvent?.fee.toLocaleString()}</Text>
               </View>
-              <Text style={styles.paidAmount}>¥{currentEvent?.fee.toLocaleString()}</Text>
-            </View>
-          ))}
+            );
+          })}
         </View>
       )}
 
@@ -963,28 +1203,503 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
           </View>
           {participants
             .filter((p) => p.payment_status === 'unpaid' && p.attendance_status === 'attending')
-            .map((participant) => (
-              <View key={participant.id} style={styles.paymentItem}>
-                <View style={styles.paymentItemLeft}>
-                  <Avatar
-                    name={participant.user?.display_name || '名前未設定'}
-                    imageUrl={participant.user?.avatar_url || undefined}
-                    size="md"
-                  />
-                  <View style={styles.paymentItemInfo}>
-                    <Text style={styles.paymentItemName}>
-                      {participant.user?.display_name || '名前未設定'}
-                    </Text>
-                    <Badge label="未払い" color="default" size="sm" variant="soft" />
+            .map((participant) => {
+              const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
+              const avatarUrl = participant.user?.avatar_url;
+              return (
+                <View key={participant.id} style={styles.paymentItem}>
+                  <View style={styles.paymentItemLeft}>
+                    <Avatar
+                      name={displayName}
+                      imageUrl={avatarUrl || undefined}
+                      size="md"
+                    />
+                    <View style={styles.paymentItemInfo}>
+                      <Text style={styles.paymentItemName}>
+                        {displayName}
+                      </Text>
+                      <View style={styles.paymentItemBadges}>
+                        <Badge label="未払い" color="default" size="sm" variant="soft" />
+                        {participant.is_manual && (
+                          <Badge label="手動" color="default" size="sm" variant="soft" />
+                        )}
+                      </View>
+                    </View>
                   </View>
                 </View>
-              </View>
-            ))}
+              );
+            })}
         </View>
       )}
     </ScrollView>
   );
 };
+
+// Stats Tab
+const StatsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
+  const { currentEvent, participants, fetchParticipants, isLoading } = useEventStore();
+  const { user } = useAuthStore();
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchParticipants(eventId);
+    }, [eventId])
+  );
+
+  const isOrganizer = currentEvent?.organizer_id === user?.id;
+
+  // Calculate statistics
+  const totalParticipants = participants.length;
+  const attendingCount = participants.filter((p) => p.attendance_status === 'attending').length;
+  const notAttendingCount = participants.filter((p) => p.attendance_status === 'not_attending').length;
+  const pendingCount = participants.filter((p) => p.attendance_status === 'pending').length;
+
+  const paidCount = participants.filter((p) => p.payment_status === 'paid').length;
+  const unpaidCount = participants.filter((p) => p.payment_status === 'unpaid' && p.attendance_status === 'attending').length;
+  const pendingConfirmationCount = participants.filter((p) => p.payment_status === 'pending_confirmation').length;
+
+  const totalExpectedRevenue = currentEvent ? attendingCount * currentEvent.fee : 0;
+  const totalCollectedRevenue = currentEvent ? paidCount * currentEvent.fee : 0;
+  const collectionRate = attendingCount > 0 ? Math.round((paidCount / attendingCount) * 100) : 0;
+  const attendanceRate = totalParticipants > 0 ? Math.round((attendingCount / totalParticipants) * 100) : 0;
+
+  // Gender distribution (from participant's gender field)
+  const genderStats = {
+    male: participants.filter((p) => p.gender === 'male' && p.attendance_status === 'attending').length,
+    female: participants.filter((p) => p.gender === 'female' && p.attendance_status === 'attending').length,
+    other: participants.filter((p) => (p.gender === 'other' || !p.gender) && p.attendance_status === 'attending').length,
+  };
+
+  // Skill level distribution (from participant's skill_level field: 1=beginner, 2=intermediate, 3=advanced)
+  const skillStats = {
+    beginner: participants.filter((p) => p.skill_level === 1 && p.attendance_status === 'attending').length,
+    intermediate: participants.filter((p) => p.skill_level === 2 && p.attendance_status === 'attending').length,
+    advanced: participants.filter((p) => p.skill_level === 3 && p.attendance_status === 'attending').length,
+    unknown: participants.filter((p) => !p.skill_level && p.attendance_status === 'attending').length,
+  };
+
+  const renderStatBar = (value: number, total: number, color: string) => {
+    const percentage = total > 0 ? (value / total) * 100 : 0;
+    return (
+      <View style={statsStyles.statBarContainer}>
+        <View style={statsStyles.statBarBg}>
+          <View style={[statsStyles.statBarFill, { width: `${percentage}%`, backgroundColor: color }]} />
+        </View>
+        <Text style={statsStyles.statBarText}>{value}人 ({Math.round(percentage)}%)</Text>
+      </View>
+    );
+  };
+
+  if (!isOrganizer) {
+    return (
+      <View style={statsStyles.noAccessContainer}>
+        <Lock size={48} color={colors.gray[300]} />
+        <Text style={statsStyles.noAccessTitle}>主催者限定</Text>
+        <Text style={statsStyles.noAccessMessage}>
+          この統計情報はイベント主催者のみ閲覧できます
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={styles.tabContent}
+      contentContainerStyle={styles.tabContentContainer}
+      refreshControl={
+        <RefreshControl
+          refreshing={isLoading}
+          onRefresh={() => fetchParticipants(eventId)}
+          colors={[colors.primary]}
+          tintColor={colors.primary}
+        />
+      }
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Overview Stats */}
+      <Card variant="elevated" style={statsStyles.statsCard}>
+        <View style={styles.cardHeader}>
+          <BarChart3 size={18} color={colors.primary} style={styles.cardHeaderIconStyle} />
+          <Text style={styles.cardHeaderTitle}>概要</Text>
+        </View>
+
+        <View style={statsStyles.overviewGrid}>
+          <View style={[statsStyles.overviewItem, statsStyles.overviewItemPrimary]}>
+            <Users size={20} color={colors.primary} />
+            <Text style={statsStyles.overviewValue}>{totalParticipants}</Text>
+            <Text style={statsStyles.overviewLabel}>総メンバー</Text>
+          </View>
+          <View style={[statsStyles.overviewItem, statsStyles.overviewItemSuccess]}>
+            <UserCheck size={20} color={colors.success} />
+            <Text style={statsStyles.overviewValue}>{attendingCount}</Text>
+            <Text style={statsStyles.overviewLabel}>参加</Text>
+          </View>
+          <View style={[statsStyles.overviewItem, statsStyles.overviewItemWarning]}>
+            <Clock size={20} color={colors.warning} />
+            <Text style={statsStyles.overviewValue}>{pendingCount}</Text>
+            <Text style={statsStyles.overviewLabel}>未回答</Text>
+          </View>
+          <View style={[statsStyles.overviewItem, statsStyles.overviewItemError]}>
+            <UserX size={20} color={colors.error} />
+            <Text style={statsStyles.overviewValue}>{notAttendingCount}</Text>
+            <Text style={statsStyles.overviewLabel}>不参加</Text>
+          </View>
+        </View>
+      </Card>
+
+      {/* Attendance Rate */}
+      <Card variant="elevated" style={statsStyles.statsCard}>
+        <View style={styles.cardHeader}>
+          <TrendingUp size={18} color={colors.success} style={styles.cardHeaderIconStyle} />
+          <Text style={styles.cardHeaderTitle}>参加率</Text>
+        </View>
+
+        <View style={statsStyles.rateContainer}>
+          <View style={statsStyles.rateCircle}>
+            <Text style={statsStyles.rateValue}>{attendanceRate}%</Text>
+          </View>
+          <View style={statsStyles.rateDetails}>
+            <View style={statsStyles.rateRow}>
+              <View style={[statsStyles.rateDot, { backgroundColor: colors.success }]} />
+              <Text style={statsStyles.rateLabel}>参加</Text>
+              <Text style={statsStyles.rateCount}>{attendingCount}人</Text>
+            </View>
+            <View style={statsStyles.rateRow}>
+              <View style={[statsStyles.rateDot, { backgroundColor: colors.error }]} />
+              <Text style={statsStyles.rateLabel}>不参加</Text>
+              <Text style={statsStyles.rateCount}>{notAttendingCount}人</Text>
+            </View>
+            <View style={statsStyles.rateRow}>
+              <View style={[statsStyles.rateDot, { backgroundColor: colors.warning }]} />
+              <Text style={statsStyles.rateLabel}>未回答</Text>
+              <Text style={statsStyles.rateCount}>{pendingCount}人</Text>
+            </View>
+          </View>
+        </View>
+      </Card>
+
+      {/* Payment Statistics */}
+      <Card variant="elevated" style={statsStyles.statsCard}>
+        <View style={styles.cardHeader}>
+          <CircleDollarSign size={18} color={colors.primary} style={styles.cardHeaderIconStyle} />
+          <Text style={styles.cardHeaderTitle}>集金状況</Text>
+        </View>
+
+        <View style={statsStyles.paymentOverview}>
+          <View style={statsStyles.paymentItem}>
+            <Text style={statsStyles.paymentLabel}>回収済</Text>
+            <Text style={[statsStyles.paymentValue, { color: colors.success }]}>
+              ¥{totalCollectedRevenue.toLocaleString()}
+            </Text>
+          </View>
+          <View style={statsStyles.paymentDivider} />
+          <View style={statsStyles.paymentItem}>
+            <Text style={statsStyles.paymentLabel}>予定総額</Text>
+            <Text style={statsStyles.paymentValue}>
+              ¥{totalExpectedRevenue.toLocaleString()}
+            </Text>
+          </View>
+        </View>
+
+        <View style={statsStyles.collectionProgress}>
+          <View style={statsStyles.progressHeader}>
+            <Text style={statsStyles.progressLabel}>回収率</Text>
+            <Text style={statsStyles.progressPercent}>{collectionRate}%</Text>
+          </View>
+          <View style={statsStyles.progressBar}>
+            <View style={[statsStyles.progressFill, { width: `${collectionRate}%` }]} />
+          </View>
+        </View>
+
+        <View style={statsStyles.paymentBreakdown}>
+          <View style={statsStyles.breakdownRow}>
+            <View style={[statsStyles.breakdownDot, { backgroundColor: colors.success }]} />
+            <Text style={statsStyles.breakdownLabel}>支払い済</Text>
+            <Text style={statsStyles.breakdownCount}>{paidCount}人</Text>
+          </View>
+          <View style={statsStyles.breakdownRow}>
+            <View style={[statsStyles.breakdownDot, { backgroundColor: colors.warning }]} />
+            <Text style={statsStyles.breakdownLabel}>確認待ち</Text>
+            <Text style={statsStyles.breakdownCount}>{pendingConfirmationCount}人</Text>
+          </View>
+          <View style={statsStyles.breakdownRow}>
+            <View style={[statsStyles.breakdownDot, { backgroundColor: colors.gray[400] }]} />
+            <Text style={statsStyles.breakdownLabel}>未払い</Text>
+            <Text style={statsStyles.breakdownCount}>{unpaidCount}人</Text>
+          </View>
+        </View>
+      </Card>
+
+      {/* Gender Distribution */}
+      <Card variant="elevated" style={statsStyles.statsCard}>
+        <View style={styles.cardHeader}>
+          <PieChart size={18} color={colors.primary} style={styles.cardHeaderIconStyle} />
+          <Text style={styles.cardHeaderTitle}>性別分布 (参加者)</Text>
+        </View>
+
+        <View style={statsStyles.distributionList}>
+          <View style={statsStyles.distributionRow}>
+            <Text style={statsStyles.distributionLabel}>男性</Text>
+            {renderStatBar(genderStats.male, attendingCount, colors.info)}
+          </View>
+          <View style={statsStyles.distributionRow}>
+            <Text style={statsStyles.distributionLabel}>女性</Text>
+            {renderStatBar(genderStats.female, attendingCount, colors.error)}
+          </View>
+          <View style={statsStyles.distributionRow}>
+            <Text style={statsStyles.distributionLabel}>その他/未設定</Text>
+            {renderStatBar(genderStats.other, attendingCount, colors.gray[400])}
+          </View>
+        </View>
+      </Card>
+
+      {/* Skill Level Distribution */}
+      <Card variant="elevated" style={statsStyles.statsCard}>
+        <View style={styles.cardHeader}>
+          <TrendingUp size={18} color={colors.warning} style={styles.cardHeaderIconStyle} />
+          <Text style={styles.cardHeaderTitle}>スキルレベル分布 (参加者)</Text>
+        </View>
+
+        <View style={statsStyles.distributionList}>
+          <View style={statsStyles.distributionRow}>
+            <Text style={statsStyles.distributionLabel}>初級</Text>
+            {renderStatBar(skillStats.beginner, attendingCount, colors.success)}
+          </View>
+          <View style={statsStyles.distributionRow}>
+            <Text style={statsStyles.distributionLabel}>中級</Text>
+            {renderStatBar(skillStats.intermediate, attendingCount, colors.warning)}
+          </View>
+          <View style={statsStyles.distributionRow}>
+            <Text style={statsStyles.distributionLabel}>上級</Text>
+            {renderStatBar(skillStats.advanced, attendingCount, colors.error)}
+          </View>
+          <View style={statsStyles.distributionRow}>
+            <Text style={statsStyles.distributionLabel}>未設定</Text>
+            {renderStatBar(skillStats.unknown, attendingCount, colors.gray[400])}
+          </View>
+        </View>
+      </Card>
+
+      <View style={{ height: spacing.xl }} />
+    </ScrollView>
+  );
+};
+
+// Stats Tab Styles
+const statsStyles = StyleSheet.create({
+  statsCard: {
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  overviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  overviewItem: {
+    flex: 1,
+    minWidth: '45%',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+  },
+  overviewItemPrimary: {
+    backgroundColor: colors.primarySoft,
+  },
+  overviewItemSuccess: {
+    backgroundColor: `${colors.success}15`,
+  },
+  overviewItemWarning: {
+    backgroundColor: `${colors.warning}15`,
+  },
+  overviewItemError: {
+    backgroundColor: `${colors.error}15`,
+  },
+  overviewValue: {
+    fontSize: typography.fontSize['2xl'],
+    fontWeight: '700',
+    color: colors.gray[900],
+    marginTop: spacing.xs,
+  },
+  overviewLabel: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[500],
+    marginTop: 2,
+  },
+  rateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
+  rateCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 4,
+    borderColor: colors.primary,
+  },
+  rateValue: {
+    fontSize: typography.fontSize['2xl'],
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  rateDetails: {
+    flex: 1,
+    gap: spacing.sm,
+  },
+  rateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  rateDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  rateLabel: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[600],
+  },
+  rateCount: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  paymentOverview: {
+    flexDirection: 'row',
+    marginBottom: spacing.md,
+  },
+  paymentItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  paymentLabel: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[500],
+    marginBottom: spacing.xs,
+  },
+  paymentValue: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: '700',
+    color: colors.gray[900],
+  },
+  paymentDivider: {
+    width: 1,
+    backgroundColor: colors.gray[200],
+    marginHorizontal: spacing.md,
+  },
+  collectionProgress: {
+    marginBottom: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[100],
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  progressLabel: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[600],
+  },
+  progressPercent: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: colors.gray[100],
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 4,
+  },
+  paymentBreakdown: {
+    gap: spacing.sm,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  breakdownDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  breakdownLabel: {
+    flex: 1,
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[600],
+  },
+  breakdownCount: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '500',
+    color: colors.gray[900],
+  },
+  distributionList: {
+    gap: spacing.md,
+  },
+  distributionRow: {
+    gap: spacing.xs,
+  },
+  distributionLabel: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[700],
+    marginBottom: 4,
+  },
+  statBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  statBarBg: {
+    flex: 1,
+    height: 12,
+    backgroundColor: colors.gray[100],
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  statBarFill: {
+    height: '100%',
+    borderRadius: 6,
+  },
+  statBarText: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[500],
+    minWidth: 70,
+    textAlign: 'right',
+  },
+  noAccessContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+    backgroundColor: colors.background,
+  },
+  noAccessTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[700],
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  noAccessMessage: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    textAlign: 'center',
+  },
+});
 
 export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { eventId } = route.params;
@@ -1132,6 +1847,11 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
             borderBottomColor: colors.gray[100],
           },
           tabBarPressColor: colors.primarySoft,
+          tabBarScrollEnabled: true,
+          tabBarItemStyle: {
+            width: 'auto',
+            paddingHorizontal: spacing.md,
+          },
         }}
       >
         <Tab.Screen name="Info" options={{ title: '情報' }}>
@@ -1142,6 +1862,15 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         </Tab.Screen>
         <Tab.Screen name="Payment" options={{ title: '集金' }}>
           {() => <PaymentTab eventId={eventId} />}
+        </Tab.Screen>
+        <Tab.Screen name="Teams" options={{ title: 'チーム' }}>
+          {() => <TeamsTab eventId={eventId} />}
+        </Tab.Screen>
+        <Tab.Screen name="Matches" options={{ title: '対戦表' }}>
+          {() => <MatchesTab eventId={eventId} />}
+        </Tab.Screen>
+        <Tab.Screen name="Stats" options={{ title: '統計' }}>
+          {() => <StatsTab eventId={eventId} />}
         </Tab.Screen>
       </Tab.Navigator>
 
@@ -1451,6 +2180,35 @@ const styles = StyleSheet.create({
     color: colors.gray[500],
   },
 
+  // Join Event Card
+  joinEventCard: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  joinEventIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  joinEventTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[900],
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  joinEventMessage: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+
   // My Status Card
   myStatusCard: {
     padding: spacing.lg,
@@ -1494,24 +2252,22 @@ const styles = StyleSheet.create({
   // Participant Summary
   participantSummary: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
+    justifyContent: 'space-around',
+    gap: spacing.xs,
   },
   summaryItem: {
     flex: 1,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    borderRadius: borderRadius.lg,
     alignItems: 'center',
   },
   summaryCount: {
-    fontSize: typography.fontSize.xl,
+    fontSize: typography.fontSize['2xl'],
     fontWeight: '700',
   },
   summaryLabel: {
     fontSize: typography.fontSize.xs,
-    color: colors.gray[500],
-    marginTop: 2,
+    color: colors.gray[600],
+    marginTop: spacing.xs,
+    textAlign: 'center',
   },
 
   // Participant Groups
@@ -1553,9 +2309,6 @@ const styles = StyleSheet.create({
   participantInfo: {
     flex: 1,
     marginLeft: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   participantName: {
     fontSize: typography.fontSize.base,
@@ -1738,15 +2491,16 @@ const styles = StyleSheet.create({
   paymentItemInfo: {
     marginLeft: spacing.md,
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingRight: spacing.sm,
   },
   paymentItemName: {
     fontSize: typography.fontSize.base,
     fontWeight: '500',
     color: colors.gray[900],
+    marginBottom: 4,
+  },
+  paymentItemBadges: {
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   confirmPaymentButton: {
     backgroundColor: colors.primary,
@@ -1918,5 +2672,180 @@ const styles = StyleSheet.create({
   participantSmallBadgeText: {
     fontSize: typography.fontSize.xs,
     color: colors.gray[600],
+  },
+  participantBadgesInline: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+
+  // Add Participant Button
+  addParticipantButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.xl,
+    padding: spacing.md,
+    marginTop: spacing.md,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
+  },
+  addParticipantIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  addParticipantTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  addParticipantSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    marginTop: 2,
+  },
+
+  // Check-in Mode Toggle Button
+  checkInModeToggleButton: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.xl,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    borderWidth: 2,
+    borderColor: colors.gray[200],
+    ...shadows.sm,
+  },
+  checkInModeToggleButtonActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  checkInModeToggleContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkInModeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.gray[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  checkInModeIconActive: {
+    backgroundColor: colors.primary,
+  },
+  checkInModeIconText: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '700',
+    color: colors.gray[600],
+  },
+  checkInModeTextContainer: {
+    flex: 1,
+  },
+  checkInModeToggleTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[700],
+  },
+  checkInModeToggleTitleActive: {
+    color: colors.primary,
+  },
+  checkInModeToggleSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    marginTop: 2,
+  },
+  checkInModeToggleSubtitleActive: {
+    color: colors.primary,
+  },
+  checkInModeBadge: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.gray[200],
+    minWidth: 50,
+    alignItems: 'center',
+  },
+  checkInModeBadgeActive: {
+    backgroundColor: colors.primary,
+  },
+  checkInModeBadgeText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: colors.gray[600],
+  },
+  checkInModeBadgeTextActive: {
+    color: colors.white,
+  },
+
+  // Summary Card
+  summaryCard: {
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  summaryCardTitle: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[700],
+    marginBottom: spacing.md,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: colors.gray[200],
+    marginVertical: spacing.md,
+  },
+  summaryIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+
+  // Check-in Buttons
+  checkInButtons: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  checkInButton: {
+    flex: 1,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    alignItems: 'center',
+  },
+  checkInButtonPresent: {
+    backgroundColor: colors.white,
+    borderColor: colors.success,
+  },
+  checkInButtonAbsent: {
+    backgroundColor: colors.white,
+    borderColor: colors.error,
+  },
+  checkInButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  checkInButtonText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.gray[700],
+  },
+  checkInButtonTextActive: {
+    color: colors.white,
+  },
+
+  // Actual Attendance Badge
+  actualAttendanceBadge: {
+    marginTop: spacing.xs,
   },
 });
