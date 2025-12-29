@@ -68,7 +68,7 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
     try {
       await signUp(data.email, data.password, data.displayName);
       showToast(
-        '登録が完了しました。メールに届いた確認リンクをクリックしてからログインしてください。',
+        '確認メールを送信しました。リンクをクリックして登録を完了してください。',
         'success',
         5000
       );
