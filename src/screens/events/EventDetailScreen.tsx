@@ -53,6 +53,7 @@ import { TeamsTab } from '../../components/teams';
 import { MatchesTab } from '../../components/matches';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { RootStackParamList, EventTabParamList, AttendanceStatus, PaymentStatus, GenderType } from '../../types';
+import { logger } from '../../utils';
 
 const { width } = Dimensions.get('window');
 const Tab = createMaterialTopTabNavigator<EventTabParamList>();
@@ -135,7 +136,7 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         message: `${currentEvent.name}\n\n日時: ${date} ${time}\n場所: ${currentEvent.location}\n参加費: ¥${currentEvent.fee.toLocaleString()}\n\n参加コード: ${currentEvent.event_code}`,
       });
     } catch (error) {
-      console.error('Share failed:', error);
+      logger.error('Share failed:', error);
     }
   };
 

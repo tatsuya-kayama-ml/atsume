@@ -67,7 +67,11 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const onSubmit = async (data: SignUpFormData) => {
     try {
       await signUp(data.email, data.password, data.displayName);
-      showToast('確認メールを送信しました。メールを確認してください。', 'success');
+      showToast(
+        '登録が完了しました。メールに届いた確認リンクをクリックしてからログインしてください。',
+        'success',
+        5000
+      );
       navigation.navigate('Login');
     } catch (error: any) {
       showToast(error.message || '登録に失敗しました', 'error');

@@ -39,14 +39,14 @@ const NativeStorageAdapter = {
     try {
       await SecureStore.setItemAsync(key, value);
     } catch {
-      console.warn('SecureStore setItem failed:', key);
+      if (__DEV__) console.warn('SecureStore setItem failed:', key);
     }
   },
   removeItem: async (key: string): Promise<void> => {
     try {
       await SecureStore.deleteItemAsync(key);
     } catch {
-      console.warn('SecureStore removeItem failed:', key);
+      if (__DEV__) console.warn('SecureStore removeItem failed:', key);
     }
   },
 };

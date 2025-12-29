@@ -73,7 +73,7 @@ export interface Event {
 export interface EventParticipant {
   id: string;
   event_id: string;
-  user_id: string;
+  user_id: string | null; // null for manual participants
   attendance_status: AttendanceStatus;
   payment_status: PaymentStatus;
   payment_reported_at: string | null;

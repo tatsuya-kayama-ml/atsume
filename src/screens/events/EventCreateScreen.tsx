@@ -20,6 +20,7 @@ import { useEventStore } from '../../stores/eventStore';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { RootStackParamList, SkillLevelOption, SkillLevelSettings, GenderOption, GenderSettings, GenderType } from '../../types';
+import { logger } from '../../utils';
 
 // デフォルトのスキルレベルオプション（3段階）
 const DEFAULT_SKILL_LEVEL_OPTIONS: SkillLevelOption[] = [
@@ -52,8 +53,8 @@ const eventSchema = z.object({
   location: z.string().min(1, '場所を入力してください'),
   fee: z
     .string()
-    .min(1, '参加費を入力してください')
-    .refine((val) => !isNaN(Number(val)) && Number(val) >= 0, '有効な金額を入力してください'),
+    .optional()
+    .refine((val) => !val || (!isNaN(Number(val)) && Number(val) >= 0), '有効な金額を入力してください'),
   capacity: z
     .string()
     .optional()
@@ -131,8 +132,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const onSubmit = async (data: EventFormData) => {
-    console.log('[EventCreate] onSubmit called with data:', data);
-    console.log('[EventCreate] selectedDate:', selectedDate.toISOString());
+    logger.log('[EventCreate] onSubmit called');
 
     try {
       // スキルレベル設定を構築
@@ -157,16 +157,16 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
         description: data.description,
         date_time: selectedDate.toISOString(),
         location: data.location,
-        fee: Number(data.fee),
+        fee: data.fee ? Number(data.fee) : 0,
         capacity: data.capacity ? Number(data.capacity) : undefined,
         password: data.password || undefined,
         skill_level_settings: skillSettings,
         gender_settings: genderSettingsData,
       };
-      console.log('[EventCreate] Creating event with:', eventData);
+      logger.log('[EventCreate] Creating event');
 
       const event = await createEvent(eventData);
-      console.log('[EventCreate] Event created successfully:', event);
+      logger.log('[EventCreate] Event created successfully:', event?.id);
 
       // 成功トースト表示
       showToast('イベントを作成しました', 'success');
@@ -174,7 +174,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
       // 作成成功後、ホームに戻る
       navigation.goBack();
     } catch (error: any) {
-      console.error('[EventCreate] Error creating event:', error);
+      logger.error('[EventCreate] Error creating event:', error);
       // エラートースト表示
       showToast(error.message || 'イベントの作成に失敗しました', 'error');
     }

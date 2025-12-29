@@ -5,10 +5,11 @@ interface ToastMessage {
   id: string;
   message: string;
   type: ToastType;
+  duration: number;
 }
 
 interface ToastContextType {
-  showToast: (message: string, type?: ToastType) => void;
+  showToast: (message: string, type?: ToastType, duration?: number) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
@@ -16,9 +17,9 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  const showToast = useCallback((message: string, type: ToastType = 'info') => {
+  const showToast = useCallback((message: string, type: ToastType = 'info', duration: number = 3000) => {
     const id = Date.now().toString();
-    setToast({ id, message, type });
+    setToast({ id, message, type, duration });
   }, []);
 
   const dismissToast = useCallback(() => {
@@ -32,6 +33,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         <Toast
           message={toast.message}
           type={toast.type}
+          duration={toast.duration}
           onDismiss={dismissToast}
           visible={!!toast}
         />

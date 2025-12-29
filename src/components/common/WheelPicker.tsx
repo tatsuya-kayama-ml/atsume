@@ -6,6 +6,8 @@ import {
   ScrollView,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  TouchableOpacity,
+  Platform,
 } from 'react-native';
 import { colors, typography, spacing } from '../../constants/theme';
 
@@ -44,6 +46,24 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
 
     if (items[clampedIndex]) {
       onValueChange(items[clampedIndex].value);
+
+      // Web: Snap to position manually since snapToInterval doesn't work
+      if (Platform.OS === 'web' && scrollViewRef.current) {
+        scrollViewRef.current.scrollTo({
+          y: clampedIndex * ITEM_HEIGHT,
+          animated: true,
+        });
+      }
+    }
+  };
+
+  const handleItemPress = (item: { label: string; value: number | string }, index: number) => {
+    onValueChange(item.value);
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({
+        y: index * ITEM_HEIGHT,
+        animated: true,
+      });
     }
   };
 
@@ -53,7 +73,7 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
       <ScrollView
         ref={scrollViewRef}
         showsVerticalScrollIndicator={false}
-        snapToInterval={ITEM_HEIGHT}
+        snapToInterval={Platform.OS !== 'web' ? ITEM_HEIGHT : undefined}
         decelerationRate="fast"
         onMomentumScrollEnd={handleScrollEnd}
         onScrollEndDrag={handleScrollEnd}
@@ -64,7 +84,12 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
         {items.map((item, index) => {
           const isSelected = item.value === selectedValue;
           return (
-            <View key={`${item.value}-${index}`} style={styles.item}>
+            <TouchableOpacity
+              key={`${item.value}-${index}`}
+              style={styles.item}
+              onPress={() => handleItemPress(item, index)}
+              activeOpacity={0.7}
+            >
               <Text
                 style={[
                   styles.itemText,
@@ -73,7 +98,7 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
               >
                 {item.label}
               </Text>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </ScrollView>

@@ -20,6 +20,7 @@ import { Button, Input, Card, DateTimePicker } from '../../components/common';
 import { useEventStore } from '../../stores/eventStore';
 import { colors, spacing, typography, borderRadius } from '../../constants/theme';
 import { RootStackParamList, SkillLevelOption, SkillLevelSettings, GenderOption, GenderSettings } from '../../types';
+import { hashPassword, logger } from '../../utils';
 
 const DEFAULT_SKILL_LEVEL_OPTIONS: SkillLevelOption[] = [
   { value: 1, label: '初心者' },
@@ -49,8 +50,8 @@ const eventSchema = z.object({
   location: z.string().min(1, '場所を入力してください'),
   fee: z
     .string()
-    .min(1, '参加費を入力してください')
-    .regex(/^\d+$/, '数値を入力してください'),
+    .optional()
+    .refine((val) => !val || /^\d+$/.test(val), '数値を入力してください'),
   capacity: z.string().regex(/^\d*$/, '数値を入力してください').optional(),
   password: z.string().optional(),
 });
@@ -177,14 +178,20 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         : null;
 
+      // Hash new password if provided, otherwise keep existing
+      let passwordHash: string | null = currentEvent?.password_hash || null;
+      if (data.password) {
+        passwordHash = await hashPassword(data.password);
+      }
+
       const updateData = {
         name: data.name,
         description: data.description || null,
         date_time: selectedDate.toISOString(),
         location: data.location,
-        fee: Number(data.fee),
+        fee: data.fee ? Number(data.fee) : 0,
         capacity: data.capacity ? Number(data.capacity) : null,
-        password_hash: data.password || currentEvent?.password_hash || null,
+        password_hash: passwordHash,
         skill_level_settings: skillSettings,
         gender_settings: genderSettingsData,
       };
@@ -198,7 +205,7 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
       }
       navigation.goBack();
     } catch (error: any) {
-      console.error('[EventEdit] Error updating event:', error);
+      logger.error('[EventEdit] Error updating event:', error);
       if (typeof window !== 'undefined') {
         window.alert(error.message || 'イベントの更新に失敗しました');
       } else {

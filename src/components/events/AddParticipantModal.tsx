@@ -14,6 +14,7 @@ import { X, UserPlus, Check } from 'lucide-react-native';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { Button } from '../common';
 import { AttendanceStatus, PaymentStatus, GenderType, SkillLevelSettings, GenderSettings } from '../../types';
+import { logger } from '../../utils';
 
 interface AddParticipantModalProps {
   visible: boolean;
@@ -73,7 +74,7 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
       setGender(undefined);
       onClose();
     } catch (error) {
-      console.error('Failed to add participant:', error);
+      logger.error('Failed to add participant:', error);
     } finally {
       setIsLoading(false);
     }

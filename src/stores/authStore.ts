@@ -5,16 +5,19 @@ import { User } from '../types';
 import { logger } from '../utils';
 
 // Get redirect URL based on platform
-const getPasswordResetRedirectUrl = (): string => {
+const getRedirectUrl = (path: string = ''): string => {
   if (Platform.OS === 'web') {
     // For web, use the current origin
     return typeof window !== 'undefined'
-      ? `${window.location.origin}/reset-password`
-      : 'http://localhost:8084/reset-password';
+      ? `${window.location.origin}${path}`
+      : `http://localhost:8081${path}`;
   }
   // For native apps, use deep link
-  return 'atsume://reset-password';
+  return `atsume://${path.replace(/^\//, '')}`;
 };
+
+const getEmailConfirmRedirectUrl = (): string => getRedirectUrl('/');
+const getPasswordResetRedirectUrl = (): string => getRedirectUrl('/reset-password');
 
 interface AuthState {
   user: User | null;
@@ -115,34 +118,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: true, error: null });
 
       // Sign up with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // User profile is created automatically by database trigger
+      const { error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: getEmailConfirmRedirectUrl(),
+          data: {
+            display_name: displayName,
+          },
+        },
       });
 
       if (authError) throw authError;
 
-      if (authData.user) {
-        // Create user profile in users table
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .insert({
-            id: authData.user.id,
-            email,
-            display_name: displayName,
-            skill_level: 3, // Default to intermediate
-          })
-          .select()
-          .single();
-
-        if (userError) throw userError;
-
-        set({
-          user: userData,
-          session: authData.session,
-          isLoading: false
-        });
-      }
+      // User profile is created by database trigger (handle_new_user)
+      // User needs to confirm email before they can sign in
+      set({ isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;

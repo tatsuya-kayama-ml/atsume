@@ -15,7 +15,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Calendar } from 'lucide-react-native';
 import { Button, Input, Card } from '../../components/common';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../contexts/ToastContext';
@@ -81,16 +80,13 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl }
+          { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.md }
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
         <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.header}>
-          <View style={styles.logoContainer}>
-            <Calendar size={40} color={colors.primary} />
-          </View>
           <Text style={styles.title}>ATSUME</Text>
           <Text style={styles.subtitle}>イベント管理をもっと簡単に</Text>
         </Animated.View>
@@ -216,36 +212,27 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: borderRadius['2xl'],
-    backgroundColor: colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-    ...shadows.lg,
+    marginBottom: spacing.lg,
   },
   title: {
-    fontSize: typography.fontSize['4xl'],
+    fontSize: typography.fontSize['3xl'],
     fontWeight: '800',
     color: colors.primary,
     marginBottom: spacing.xs,
     letterSpacing: -1,
   },
   subtitle: {
-    fontSize: typography.fontSize.base,
+    fontSize: typography.fontSize.sm,
     color: colors.gray[500],
     fontWeight: '500',
   },
   formCard: {
     padding: spacing.lg,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.md,
   },
   formTitle: {
     fontSize: typography.fontSize['2xl'],

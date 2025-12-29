@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Event } from '../types';
+import { logger } from '../utils';
 
 // Configure notification handler
 Notifications.setNotificationHandler({
@@ -65,7 +66,7 @@ export const notificationService = {
 
       return identifier;
     } catch (error) {
-      console.error('Failed to schedule notification:', error);
+      logger.error('Failed to schedule notification:', error);
       return null;
     }
   },
@@ -141,12 +142,17 @@ export const notificationService = {
     if (Platform.OS === 'web') return null;
 
     try {
+      const projectId = process.env.EXPO_PUBLIC_PROJECT_ID;
+      if (!projectId) {
+        logger.warn('EXPO_PUBLIC_PROJECT_ID is not set');
+        return null;
+      }
       const token = await Notifications.getExpoPushTokenAsync({
-        projectId: 'your-project-id', // Replace with actual project ID
+        projectId,
       });
       return token.data;
     } catch (error) {
-      console.error('Failed to get push token:', error);
+      logger.error('Failed to get push token:', error);
       return null;
     }
   },

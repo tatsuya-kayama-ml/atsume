@@ -420,7 +420,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                         <View style={styles.memberInfo}>
                           <Avatar
                             name={displayName}
-                            imageUrl={memberUser?.avatar_url}
+                            imageUrl={memberUser?.avatar_url ?? undefined}
                             size="sm"
                           />
                           <Text style={styles.memberName}>{displayName}</Text>

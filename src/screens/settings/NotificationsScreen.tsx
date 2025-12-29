@@ -12,6 +12,7 @@ import { supabase } from '../../services/supabase';
 import { useAuthStore } from '../../stores/authStore';
 import { Notification } from '../../types';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
+import { logger } from '../../utils';
 
 export const NotificationsScreen: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -32,7 +33,7 @@ export const NotificationsScreen: React.FC = () => {
       if (error) throw error;
       setNotifications(data || []);
     } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+      logger.error('Failed to fetch notifications:', error);
     } finally {
       setIsLoading(false);
     }
@@ -53,7 +54,7 @@ export const NotificationsScreen: React.FC = () => {
         prev.map((n) => (n.id === notificationId ? { ...n, is_read: true } : n))
       );
     } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+      logger.error('Failed to mark notification as read:', error);
     }
   };
 
