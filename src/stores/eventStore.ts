@@ -52,6 +52,7 @@ interface CreateEventData {
   password?: string;
   skill_level_settings?: SkillLevelSettings;
   gender_settings?: GenderSettings;
+  paypay_link?: string;
 }
 
 // Generate 6-character alphanumeric code
@@ -168,6 +169,7 @@ export const useEventStore = create<EventState>((set, get) => ({
         timer_position: 'bottom',
         skill_level_settings: data.skill_level_settings || null,
         gender_settings: data.gender_settings || null,
+        paypay_link: data.paypay_link || null,
       };
       logger.log('[EventStore] Inserting event');
 

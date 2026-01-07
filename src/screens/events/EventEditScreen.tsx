@@ -54,6 +54,7 @@ const eventSchema = z.object({
     .refine((val) => !val || /^\d+$/.test(val), '数値を入力してください'),
   capacity: z.string().regex(/^\d*$/, '数値を入力してください').optional(),
   password: z.string().optional(),
+  paypayLink: z.string().optional(),
 });
 
 type EventFormData = z.infer<typeof eventSchema>;
@@ -96,6 +97,7 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
       fee: '0',
       capacity: '',
       password: '',
+      paypayLink: '',
     },
   });
 
@@ -112,6 +114,7 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
         fee: currentEvent.fee.toString(),
         capacity: currentEvent.capacity?.toString() || '',
         password: '',
+        paypayLink: currentEvent.paypay_link || '',
       });
       setSelectedDate(new Date(currentEvent.date_time));
 
@@ -194,6 +197,7 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
         password_hash: passwordHash,
         skill_level_settings: skillSettings,
         gender_settings: genderSettingsData,
+        paypay_link: data.paypayLink || null,
       };
 
       await updateEvent(eventId, updateData);
@@ -383,6 +387,24 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
               />
             </View>
           </View>
+
+          <Controller
+            control={control}
+            name="paypayLink"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <Input
+                label="PayPayリンク（任意）"
+                placeholder="https://qr.paypay.ne.jp/..."
+                value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                hint="PayPayの送金リンクを設定すると、参加者が支払いタブからPayPayで送金できます"
+                variant="filled"
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+            )}
+          />
         </Card>
 
         {/* Section: Password */}

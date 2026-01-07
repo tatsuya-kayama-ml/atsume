@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Dimensions,
   Platform,
+  Linking,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect } from '@react-navigation/native';
@@ -1095,12 +1096,33 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               </Text>
             </View>
           ) : (
-            <Button
-              title="送金を報告する"
-              onPress={handleReportPayment}
-              fullWidth
-              size="lg"
-            />
+            <View style={styles.paymentActionsContainer}>
+              {currentEvent?.paypay_link && (
+                <TouchableOpacity
+                  style={styles.paypayButton}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    if (currentEvent.paypay_link) {
+                      Linking.openURL(currentEvent.paypay_link);
+                    }
+                  }}
+                >
+                  <Text style={styles.paypayButtonText}>PayPayで支払う</Text>
+                </TouchableOpacity>
+              )}
+              <Button
+                title="送金を報告する"
+                onPress={handleReportPayment}
+                fullWidth
+                size="lg"
+                variant={currentEvent?.paypay_link ? 'outline' : 'primary'}
+              />
+              {currentEvent?.paypay_link && (
+                <Text style={styles.paymentHint}>
+                  PayPayで支払い後、上のボタンで報告してください
+                </Text>
+              )}
+            </View>
           )}
         </Card>
       )}
@@ -2445,6 +2467,30 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     fontWeight: '500',
     color: colors.warning,
+  },
+
+  // PayPay Payment
+  paymentActionsContainer: {
+    gap: spacing.md,
+  },
+  paypayButton: {
+    backgroundColor: '#FF0033',
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paypayButtonText: {
+    color: colors.white,
+    fontSize: typography.fontSize.lg,
+    fontWeight: '700',
+  },
+  paymentHint: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    textAlign: 'center',
+    marginTop: spacing.xs,
   },
 
   // Payment List

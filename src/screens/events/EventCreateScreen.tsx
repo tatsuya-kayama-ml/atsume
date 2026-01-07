@@ -60,6 +60,7 @@ const eventSchema = z.object({
     .optional()
     .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0), '有効な人数を入力してください'),
   password: z.string().optional(),
+  paypayLink: z.string().optional(),
 });
 
 type EventFormData = z.infer<typeof eventSchema>;
@@ -99,6 +100,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
       fee: '',
       capacity: '',
       password: '',
+      paypayLink: '',
     },
   });
 
@@ -162,6 +164,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
         password: data.password || undefined,
         skill_level_settings: skillSettings,
         gender_settings: genderSettingsData,
+        paypay_link: data.paypayLink || undefined,
       };
       logger.log('[EventCreate] Creating event');
 
@@ -334,6 +337,24 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
               />
             </View>
           </View>
+
+          <Controller
+            control={control}
+            name="paypayLink"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <Input
+                label="PayPayリンク（任意）"
+                placeholder="https://qr.paypay.ne.jp/..."
+                value={value}
+                onChangeText={onChange}
+                onBlur={onBlur}
+                hint="PayPayの送金リンクを設定すると、参加者が支払いタブからPayPayで送金できます"
+                variant="filled"
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+            )}
+          />
         </Card>
 
         {/* Section: Security */}

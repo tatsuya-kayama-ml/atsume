@@ -66,6 +66,7 @@ export interface Event {
   timer_position: TimerPosition;
   skill_level_settings: SkillLevelSettings | null;
   gender_settings: GenderSettings | null;
+  paypay_link: string | null;
   created_at: string;
   updated_at: string;
 }
