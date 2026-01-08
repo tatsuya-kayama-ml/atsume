@@ -757,6 +757,23 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         )}
       </Card>
 
+      {/* Add Participant Button (Organizer Only) */}
+      {isOrganizer && (
+        <TouchableOpacity
+          style={styles.addParticipantButton}
+          onPress={() => setShowAddModal(true)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.addParticipantIcon}>
+            <UserPlus size={20} color={colors.primary} />
+          </View>
+          <View>
+            <Text style={styles.addParticipantTitle}>参加者を手動で追加</Text>
+            <Text style={styles.addParticipantSubtitle}>アプリ未登録の方を追加できます</Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
       {/* Participant Groups */}
       {attendingParticipants.length > 0 && (
         <View style={styles.participantGroup}>
@@ -848,23 +865,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             />
           ))}
         </View>
-      )}
-
-      {/* Add Participant Button (Organizer Only) */}
-      {isOrganizer && (
-        <TouchableOpacity
-          style={styles.addParticipantButton}
-          onPress={() => setShowAddModal(true)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.addParticipantIcon}>
-            <UserPlus size={20} color={colors.primary} />
-          </View>
-          <View>
-            <Text style={styles.addParticipantTitle}>参加者を手動で追加</Text>
-            <Text style={styles.addParticipantSubtitle}>アプリ未登録の方を追加できます</Text>
-          </View>
-        </TouchableOpacity>
       )}
 
       {/* Add Participant Modal */}
