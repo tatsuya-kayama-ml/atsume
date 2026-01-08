@@ -15,7 +15,8 @@ export interface ActiveTimer {
   eventId: string;
   eventName: string;
   duration: number; // total duration in seconds
-  remainingTime: number; // remaining time in seconds
+  remainingTime: number; // remaining time in seconds (表示用)
+  remainingTimeAtStart: number; // 開始/再開時点の残り時間（計算用ベース）
   isRunning: boolean;
   isPrepared: boolean; // タイマーがセットされているが開始されていない状態
   startedAt: number | null; // timestamp when started
@@ -131,6 +132,7 @@ export const useTimerStore = create<TimerState>()(
             eventName,
             duration,
             remainingTime: duration,
+            remainingTimeAtStart: duration,
             isRunning: false,
             isPrepared: true,
             startedAt: null,
@@ -148,6 +150,7 @@ export const useTimerStore = create<TimerState>()(
             eventName,
             duration,
             remainingTime: duration,
+            remainingTimeAtStart: duration,
             isRunning: true,
             isPrepared: false,
             startedAt: now,
@@ -166,6 +169,7 @@ export const useTimerStore = create<TimerState>()(
         set({
           activeTimer: {
             ...activeTimer,
+            remainingTimeAtStart: activeTimer.remainingTime,
             isRunning: true,
             isPrepared: false,
             startedAt: now,
@@ -181,17 +185,18 @@ export const useTimerStore = create<TimerState>()(
 
         stopTimerInterval();
         const now = Date.now();
-        // タイムスタンプベースで残り時間を計算
+        // タイムスタンプベースで残り時間を計算（開始時点のベースから経過時間を引く）
         const elapsed = activeTimer.startedAt
           ? Math.floor((now - activeTimer.startedAt) / 1000)
           : 0;
-        const newRemainingTime = Math.max(0, activeTimer.remainingTime - elapsed);
+        const newRemainingTime = Math.max(0, activeTimer.remainingTimeAtStart - elapsed);
 
         set({
           activeTimer: {
             ...activeTimer,
             isRunning: false,
             remainingTime: newRemainingTime,
+            remainingTimeAtStart: newRemainingTime,
             pausedAt: now,
             startedAt: null,
           },
@@ -206,6 +211,7 @@ export const useTimerStore = create<TimerState>()(
         set({
           activeTimer: {
             ...activeTimer,
+            remainingTimeAtStart: activeTimer.remainingTime,
             isRunning: true,
             isPrepared: false,
             startedAt: now,
@@ -229,6 +235,7 @@ export const useTimerStore = create<TimerState>()(
           activeTimer: {
             ...activeTimer,
             remainingTime: activeTimer.duration,
+            remainingTimeAtStart: activeTimer.duration,
             isRunning: false,
             isPrepared: true,
             startedAt: null,
@@ -244,12 +251,8 @@ export const useTimerStore = create<TimerState>()(
 
         const now = Date.now();
         const elapsed = Math.floor((now - activeTimer.startedAt) / 1000);
-        const baseTime = activeTimer.remainingTime;
-
-        // startedAt時点でのremainingTimeから経過時間を引く
-        // しかし、startedAtが設定された時点でremainingTimeは固定されているので、
-        // 実際にはdurationからの累積経過時間を計算する必要がある
-        const newRemainingTime = Math.max(0, baseTime - elapsed);
+        // 開始/再開時点のベース時間から経過時間を引く
+        const newRemainingTime = Math.max(0, activeTimer.remainingTimeAtStart - elapsed);
 
         if (newRemainingTime <= 0) {
           // タイマー完了
@@ -267,7 +270,7 @@ export const useTimerStore = create<TimerState>()(
             onTimerComplete();
           }
         } else {
-          // 残り時間を更新（1秒ごとの減算ではなく、タイムスタンプベース）
+          // 残り時間を更新（表示用）
           set({
             activeTimer: {
               ...activeTimer,
