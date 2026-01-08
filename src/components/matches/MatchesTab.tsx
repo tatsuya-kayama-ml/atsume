@@ -787,7 +787,8 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
                           value={editScores.team1}
                           onChangeText={(text) => setEditScores({ ...editScores, team1: text })}
                           keyboardType="numeric"
-                          placeholder="0"
+                          placeholder="-"
+                          placeholderTextColor={colors.gray[400]}
                         />
                       ) : (
                         <Text style={styles.score}>
@@ -817,7 +818,8 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
                           value={editScores.team2}
                           onChangeText={(text) => setEditScores({ ...editScores, team2: text })}
                           keyboardType="numeric"
-                          placeholder="0"
+                          placeholder="-"
+                          placeholderTextColor={colors.gray[400]}
                         />
                       ) : (
                         <Text style={styles.score}>
