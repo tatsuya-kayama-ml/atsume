@@ -67,6 +67,5 @@ export type EventTabParamList = {
   Payment: undefined;
   Teams: undefined;
   Matches: undefined;
-  Timer: undefined;
   Stats: undefined;
 };
