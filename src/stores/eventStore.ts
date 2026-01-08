@@ -185,6 +185,21 @@ export const useEventStore = create<EventState>((set, get) => ({
 
       if (error) throw error;
 
+      // 主催者を参加者として自動追加（支払い済み状態）
+      const { error: participantError } = await supabase
+        .from('event_participants')
+        .insert({
+          event_id: event.id,
+          user_id: user.id,
+          attendance_status: 'attending',
+          payment_status: 'paid',
+        });
+
+      if (participantError) {
+        logger.warn('[EventStore] Failed to add organizer as participant:', participantError);
+        // 参加者追加に失敗してもイベント作成は成功として扱う
+      }
+
       set((state) => ({
         events: [...state.events, event],
         isLoading: false,

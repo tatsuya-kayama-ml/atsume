@@ -949,7 +949,7 @@ const ParticipantCard: React.FC<{
 
 // Payment Tab
 const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
-  const { participants, currentEvent, fetchParticipants, reportPayment, confirmPayment, isLoading } = useEventStore();
+  const { participants, currentEvent, fetchParticipants, reportPayment, confirmPayment, updatePaymentStatus, isLoading } = useEventStore();
   const { user } = useAuthStore();
 
   useFocusEffect(
@@ -1222,6 +1222,15 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                       </View>
                     </View>
                   </View>
+                  {isOrganizer && (
+                    <TouchableOpacity
+                      style={styles.markPaidButton}
+                      onPress={() => handleConfirmPayment(participant.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.markPaidButtonText}>集金済み</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               );
             })}
@@ -2536,6 +2545,17 @@ const styles = StyleSheet.create({
     ...shadows.primary,
   },
   confirmPaymentButtonText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.white,
+  },
+  markPaidButton: {
+    backgroundColor: colors.success,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+  },
+  markPaidButtonText: {
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
     color: colors.white,

@@ -348,7 +348,6 @@ export const useMatchStore = create<MatchState>((set, get) => ({
             match_number: match.match_number,
             team1_id: match.team1_id === 'WINNER' || match.team1_id === 'LOSER_SF1' || match.team1_id === 'LOSER_SF2' ? null : match.team1_id,
             team2_id: match.team2_id === 'WINNER' || match.team2_id === 'LOSER_SF1' || match.team2_id === 'LOSER_SF2' ? null : match.team2_id,
-            bracket_type: 'winners',
             status: 'scheduled',
           });
         });
@@ -396,7 +395,6 @@ export const useMatchStore = create<MatchState>((set, get) => ({
             match_number: matchNumber++,
             team1_id: shuffledTeams[i],
             team2_id: shuffledTeams[i + 1],
-            bracket_type: 'winners',
             status: 'scheduled',
           });
         }
@@ -416,7 +414,6 @@ export const useMatchStore = create<MatchState>((set, get) => ({
             match_number: i + 1,
             team1_id: null,
             team2_id: null,
-            bracket_type: 'winners',
             status: 'scheduled',
           });
         }
@@ -431,11 +428,10 @@ export const useMatchStore = create<MatchState>((set, get) => ({
         for (let i = 0; i < losersMatches; i++) {
           matchesToInsert.push({
             tournament_id: tournamentId,
-            round: r,
+            round: round + r,
             match_number: i + 1,
             team1_id: null,
             team2_id: null,
-            bracket_type: 'losers',
             status: 'scheduled',
           });
         }
@@ -444,11 +440,10 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       // グランドファイナル
       matchesToInsert.push({
         tournament_id: tournamentId,
-        round: 1,
+        round: round + losersRounds + 1,
         match_number: 1,
         team1_id: null,
         team2_id: null,
-        bracket_type: 'finals',
         status: 'scheduled',
       });
 
