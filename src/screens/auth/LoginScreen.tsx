@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   dividerText: {
     paddingHorizontal: spacing.md,
     fontSize: typography.fontSize.sm,
-    color: colors.gray[400],
+    color: colors.gray[500],
   },
   signUpButton: {
     width: '100%',
@@ -316,11 +316,12 @@ const styles = StyleSheet.create({
   },
   legalLinkText: {
     fontSize: typography.fontSize.xs,
-    color: colors.gray[500],
+    color: colors.gray[600],
+    textDecorationLine: 'underline',
   },
   legalSeparator: {
     fontSize: typography.fontSize.xs,
-    color: colors.gray[400],
+    color: colors.gray[500],
     marginHorizontal: spacing.xs,
   },
 });

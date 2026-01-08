@@ -235,6 +235,16 @@ export const animation = {
   slower: 500,
 };
 
+// Accessibility constants - WCAG 2.1 compliant
+export const accessibility = {
+  // Minimum touch target size (44x44px per WCAG 2.1)
+  minTouchTarget: 44,
+  // Minimum spacing between touch targets
+  minTouchSpacing: 8,
+  // Hit slop for small buttons
+  hitSlop: { top: 10, bottom: 10, left: 10, right: 10 },
+};
+
 // Common styles
 export const commonStyles = {
   // Card styles
@@ -252,16 +262,28 @@ export const commonStyles = {
   },
 };
 
-// Dark mode colors (for future use)
+// Dark mode colors
 export const darkColors = {
   ...colors,
+  // Dark backgrounds
   background: '#0F172A',
   backgroundAlt: '#1E293B',
   surface: '#1E293B',
   surfaceElevated: '#334155',
-  text: colors.white,
-  textSecondary: colors.gray[400],
-  border: colors.gray[700],
+  // Dark text colors
+  text: '#F8FAFC',
+  textSecondary: '#94A3B8',
+  textMuted: '#64748B',
+  // Dark borders
+  border: '#334155',
+  borderLight: '#1E293B',
+  // Dark status colors (slightly brighter for visibility)
+  primarySoft: '#1E3A5F',
+  secondarySoft: '#134E4A',
+  successSoft: '#14532D',
+  warningSoft: '#713F12',
+  errorSoft: '#7F1D1D',
+  infoSoft: '#0C4A6E',
 };
 
 // Light mode colors
