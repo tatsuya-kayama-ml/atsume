@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,14 +11,12 @@ import {
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withRepeat,
   withSequence,
   withTiming,
   Easing,
   FadeIn,
   FadeInDown,
-  interpolateColor,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import {
@@ -29,76 +27,43 @@ import {
   Square,
   Timer as TimerIcon,
   AlertCircle,
-  Zap,
+  Check,
 } from 'lucide-react-native';
 import { useTimerStore, formatTime, TimerPreset } from '../../stores/timerStore';
 import { useEventStore } from '../../stores/eventStore';
 import { Card } from '../common';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 
-// Energetic accent colors for sports/event app (from UI Pro Max)
-const TIMER_COLORS = {
-  primary: colors.primary,
-  accent: '#F97316', // Energetic orange CTA
-  warning: '#FBBF24', // Warm yellow
-  danger: '#EF4444',
-  success: '#22C55E',
-};
-
 interface TimerTabProps {
   eventId: string;
 }
-
-const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
 export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
   const { currentEvent } = useEventStore();
   const {
     activeTimer,
     presets,
-    startTimer,
+    prepareTimer,
+    startPreparedTimer,
     pauseTimer,
     resumeTimer,
     stopTimer,
     resetTimer,
-    tick,
   } = useTimerStore();
 
   const [customMinutes, setCustomMinutes] = useState('');
   const [customSeconds, setCustomSeconds] = useState('');
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Animation values
-  const progressAnim = useSharedValue(0);
   const glowOpacity = useSharedValue(0);
 
-  // Timer tick effect
-  useEffect(() => {
-    if (activeTimer?.isRunning) {
-      intervalRef.current = setInterval(() => {
-        tick();
-      }, 1000);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [activeTimer?.isRunning, tick]);
-
   // Glow animation when running (subtle, not distracting per UX guidelines)
-  useEffect(() => {
+  React.useEffect(() => {
     if (activeTimer?.isRunning) {
       glowOpacity.value = withRepeat(
         withSequence(
-          withTiming(0.6, { duration: 800, easing: Easing.out(Easing.ease) }),
-          withTiming(0.3, { duration: 800, easing: Easing.in(Easing.ease) })
+          withTiming(0.5, { duration: 800, easing: Easing.out(Easing.ease) }),
+          withTiming(0.2, { duration: 800, easing: Easing.in(Easing.ease) })
         ),
         -1,
         true
@@ -111,19 +76,22 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
   // Alert animation when timer is about to end (less than 30 seconds)
   const isAlmostDone = activeTimer && activeTimer.remainingTime <= 30 && activeTimer.remainingTime > 0;
   const isDone = activeTimer && activeTimer.remainingTime === 0;
+  const isPrepared = activeTimer?.isPrepared;
 
   const glowAnimatedStyle = useAnimatedStyle(() => ({
     opacity: glowOpacity.value,
   }));
 
+  // プリセット押下時：時間をセットするだけ（開始しない）
   const handlePresetPress = (preset: TimerPreset) => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    startTimer(eventId, currentEvent?.name || 'イベント', preset.duration);
+    prepareTimer(eventId, currentEvent?.name || 'イベント', preset.duration);
   };
 
-  const handleCustomStart = () => {
+  // カスタム時間をセット（開始しない）
+  const handleCustomSet = () => {
     const minutes = parseInt(customMinutes, 10) || 0;
     const seconds = parseInt(customSeconds, 10) || 0;
     const totalSeconds = minutes * 60 + seconds;
@@ -131,18 +99,21 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
     if (totalSeconds <= 0) return;
 
     if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    startTimer(eventId, currentEvent?.name || 'イベント', totalSeconds);
+    prepareTimer(eventId, currentEvent?.name || 'イベント', totalSeconds);
     setCustomMinutes('');
     setCustomSeconds('');
   };
 
+  // 準備されたタイマーを開始、または一時停止/再開
   const handlePlayPause = () => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    if (activeTimer?.isRunning) {
+    if (activeTimer?.isPrepared) {
+      startPreparedTimer();
+    } else if (activeTimer?.isRunning) {
       pauseTimer();
     } else {
       resumeTimer();
@@ -165,7 +136,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
 
   const isCurrentEventTimer = activeTimer?.eventId === eventId;
 
-  // Timer display component with Vibrant & Block-based design
+  // Timer display component with clean design (トンマナ統一)
   const renderTimerDisplay = () => {
     if (!activeTimer) return null;
 
@@ -176,7 +147,20 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
     const remainingProgress = 1 - progress;
 
     // Split time for block-style display
-    const [minutes, seconds] = timeString.split(':');
+    const timeParts = timeString.split(':');
+    const minutes = timeParts.length === 3 ? timeParts[1] : timeParts[0];
+    const seconds = timeParts.length === 3 ? timeParts[2] : timeParts[1];
+    const hours = timeParts.length === 3 ? timeParts[0] : null;
+
+    // 状態に応じた色
+    const getStatusColor = () => {
+      if (isDone) return colors.error;
+      if (isAlmostDone) return colors.warning;
+      if (isPrepared) return colors.secondary;
+      return colors.primary;
+    };
+
+    const statusColor = getStatusColor();
 
     return (
       <Animated.View
@@ -189,7 +173,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
             style={[
               styles.glowEffect,
               glowAnimatedStyle,
-              isAlmostDone && styles.glowEffectWarning,
+              { backgroundColor: statusColor },
             ]}
           />
         )}
@@ -199,31 +183,53 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
             styles.timerCard,
             isDone && styles.timerCardDone,
             isAlmostDone && styles.timerCardWarning,
+            isPrepared && styles.timerCardPrepared,
           ]}
         >
           {/* Circular progress indicator */}
           <View style={styles.circularProgressContainer}>
-            <View style={styles.circularProgressBg}>
+            <View
+              style={[
+                styles.circularProgressBg,
+                isPrepared && styles.circularProgressBgPrepared,
+              ]}
+            >
               <View
                 style={[
                   styles.circularProgressFill,
-                  {
-                    backgroundColor: isDone
-                      ? TIMER_COLORS.danger
-                      : isAlmostDone
-                      ? TIMER_COLORS.warning
-                      : TIMER_COLORS.accent,
-                  },
+                  { backgroundColor: statusColor },
                 ]}
               >
                 {/* Time display - Block style */}
                 <View style={styles.timeBlocksContainer}>
+                  {hours && (
+                    <>
+                      <View style={styles.timeBlock}>
+                        <Text
+                          style={[
+                            styles.timeBlockNumber,
+                            (isDone || isAlmostDone) && styles.timeBlockNumberDark,
+                          ]}
+                        >
+                          {hours}
+                        </Text>
+                        <Text style={styles.timeBlockLabel}>時</Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.timeSeparator,
+                          (isDone || isAlmostDone) && styles.timeSeparatorDark,
+                        ]}
+                      >
+                        :
+                      </Text>
+                    </>
+                  )}
                   <View style={styles.timeBlock}>
                     <Text
                       style={[
                         styles.timeBlockNumber,
-                        isDone && styles.timeBlockNumberDone,
-                        isAlmostDone && styles.timeBlockNumberWarning,
+                        (isDone || isAlmostDone) && styles.timeBlockNumberDark,
                       ]}
                     >
                       {minutes}
@@ -234,7 +240,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
                   <Text
                     style={[
                       styles.timeSeparator,
-                      isDone && styles.timeSeparatorDone,
+                      (isDone || isAlmostDone) && styles.timeSeparatorDark,
                     ]}
                   >
                     :
@@ -244,8 +250,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
                     <Text
                       style={[
                         styles.timeBlockNumber,
-                        isDone && styles.timeBlockNumberDone,
-                        isAlmostDone && styles.timeBlockNumberWarning,
+                        (isDone || isAlmostDone) && styles.timeBlockNumberDark,
                       ]}
                     >
                       {seconds}
@@ -258,12 +263,17 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
                 <View style={styles.statusRow}>
                   {isDone ? (
                     <>
-                      <AlertCircle size={16} color={TIMER_COLORS.danger} />
+                      <AlertCircle size={16} color={colors.error} />
                       <Text style={styles.statusTextDone}>タイムアップ!</Text>
+                    </>
+                  ) : isPrepared ? (
+                    <>
+                      <Check size={14} color={colors.white} />
+                      <Text style={styles.statusTextPrepared}>準備完了</Text>
                     </>
                   ) : activeTimer.isRunning ? (
                     <>
-                      <Zap size={14} color={TIMER_COLORS.accent} />
+                      <View style={styles.runningDot} />
                       <Text style={styles.statusTextRunning}>計測中</Text>
                     </>
                   ) : (
@@ -279,11 +289,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
                 style={[
                   styles.progressRing,
                   {
-                    borderColor: isDone
-                      ? TIMER_COLORS.danger
-                      : isAlmostDone
-                      ? TIMER_COLORS.warning
-                      : TIMER_COLORS.accent,
+                    borderColor: statusColor,
                     borderLeftColor: 'transparent',
                     borderBottomColor: 'transparent',
                     transform: [{ rotate: `${progress * 360}deg` }],
@@ -305,9 +311,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
             <View
               style={[
                 styles.linearProgress,
-                { width: `${remainingProgress * 100}%` },
-                isDone && styles.linearProgressDone,
-                isAlmostDone && styles.linearProgressWarning,
+                { width: `${remainingProgress * 100}%`, backgroundColor: statusColor },
               ]}
             />
             <Text style={styles.progressPercentText}>
@@ -315,7 +319,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
             </Text>
           </View>
 
-          {/* Control buttons - Block style with energetic colors */}
+          {/* Control buttons */}
           <View style={styles.controlButtons}>
             <TouchableOpacity
               style={styles.controlButtonSecondary}
@@ -329,7 +333,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
             <TouchableOpacity
               style={[
                 styles.controlButtonPrimary,
-                activeTimer.isRunning && styles.controlButtonPause,
+                { backgroundColor: statusColor },
                 isDone && styles.controlButtonResume,
               ]}
               onPress={handlePlayPause}
@@ -347,7 +351,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
               onPress={handleStop}
               activeOpacity={0.7}
             >
-              <Square size={20} color={TIMER_COLORS.danger} />
+              <Square size={20} color={colors.error} />
               <Text style={styles.controlButtonLabelDanger}>停止</Text>
             </TouchableOpacity>
           </View>
@@ -364,18 +368,34 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
           <Clock size={18} color={colors.primary} />
           <Text style={styles.sectionTitle}>プリセット</Text>
         </View>
+        <Text style={styles.sectionDescription}>
+          時間を選択してから開始ボタンを押してください
+        </Text>
 
         <View style={styles.presetsGrid}>
-          {presets.map((preset) => (
-            <TouchableOpacity
-              key={preset.id}
-              style={styles.presetButton}
-              onPress={() => handlePresetPress(preset)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.presetText}>{preset.name}</Text>
-            </TouchableOpacity>
-          ))}
+          {presets.map((preset) => {
+            const isSelected = activeTimer?.duration === preset.duration && isCurrentEventTimer;
+            return (
+              <TouchableOpacity
+                key={preset.id}
+                style={[
+                  styles.presetButton,
+                  isSelected && styles.presetButtonSelected,
+                ]}
+                onPress={() => handlePresetPress(preset)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.presetText,
+                    isSelected && styles.presetTextSelected,
+                  ]}
+                >
+                  {preset.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </Card>
     </Animated.View>
@@ -421,15 +441,15 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
 
           <TouchableOpacity
             style={[
-              styles.startButton,
-              (!customMinutes && !customSeconds) && styles.startButtonDisabled,
+              styles.setButton,
+              (!customMinutes && !customSeconds) && styles.setButtonDisabled,
             ]}
-            onPress={handleCustomStart}
+            onPress={handleCustomSet}
             disabled={!customMinutes && !customSeconds}
             activeOpacity={0.7}
           >
-            <Play size={18} color={colors.white} />
-            <Text style={styles.startButtonText}>開始</Text>
+            <Check size={18} color={colors.white} />
+            <Text style={styles.setButtonText}>セット</Text>
           </TouchableOpacity>
         </View>
       </Card>
@@ -448,7 +468,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
             <Text style={styles.warningTitle}>他のイベントでタイマー実行中</Text>
             <Text style={styles.warningText}>
               「{activeTimer.eventName}」のタイマーが実行中です。
-              新しいタイマーを開始すると、現在のタイマーは停止されます。
+              新しいタイマーをセットすると、現在のタイマーは停止されます。
             </Text>
           </View>
         </Card>
@@ -479,9 +499,10 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
         <View style={styles.hintsContainer}>
           <Text style={styles.hintsTitle}>ヒント</Text>
           <Text style={styles.hintsText}>
+            • プリセットまたはカスタム時間をセットしてから開始{'\n'}
             • タイマーは画面下部にも表示されます{'\n'}
             • 他の画面に移動してもタイマーは継続します{'\n'}
-            • 終了時にはアラート音が鳴ります
+            • 終了時にはアラート音とバイブレーションでお知らせ
           </Text>
         </View>
       </Animated.View>
@@ -499,7 +520,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing['3xl'],
   },
 
-  // Timer display - Vibrant & Block-based design
+  // Timer display - Clean design (トンマナ統一)
   timerDisplayContainer: {
     marginBottom: spacing.xl,
     position: 'relative',
@@ -511,11 +532,7 @@ const styles = StyleSheet.create({
     right: 20,
     bottom: 20,
     borderRadius: borderRadius['2xl'],
-    backgroundColor: TIMER_COLORS.accent,
     ...shadows.lg,
-  },
-  glowEffectWarning: {
-    backgroundColor: TIMER_COLORS.warning,
   },
   timerCard: {
     backgroundColor: colors.white,
@@ -523,15 +540,18 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     alignItems: 'center',
     ...shadows.lg,
-    borderWidth: 3,
-    borderColor: 'transparent',
+    borderWidth: 2,
+    borderColor: colors.gray[100],
+  },
+  timerCardPrepared: {
+    borderColor: colors.secondary,
   },
   timerCardWarning: {
-    borderColor: TIMER_COLORS.warning,
+    borderColor: colors.warning,
   },
   timerCardDone: {
-    borderColor: TIMER_COLORS.danger,
-    backgroundColor: '#FEF2F2',
+    borderColor: colors.error,
+    backgroundColor: colors.errorSoft,
   },
 
   // Circular progress
@@ -551,6 +571,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 6,
     borderColor: colors.gray[200],
+  },
+  circularProgressBgPrepared: {
+    borderColor: colors.secondaryLight,
   },
   circularProgressFill: {
     width: 160,
@@ -590,10 +613,7 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
-  timeBlockNumberWarning: {
-    color: colors.gray[900],
-  },
-  timeBlockNumberDone: {
+  timeBlockNumberDark: {
     color: colors.gray[900],
   },
   timeBlockLabel: {
@@ -608,7 +628,7 @@ const styles = StyleSheet.create({
     color: colors.white,
     marginBottom: spacing.sm,
   },
-  timeSeparatorDone: {
+  timeSeparatorDark: {
     color: colors.gray[900],
   },
 
@@ -623,7 +643,20 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
   },
+  runningDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.white,
+  },
   statusTextRunning: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '700',
+    color: colors.white,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  statusTextPrepared: {
     fontSize: typography.fontSize.xs,
     fontWeight: '700',
     color: colors.white,
@@ -638,7 +671,7 @@ const styles = StyleSheet.create({
   statusTextDone: {
     fontSize: typography.fontSize.sm,
     fontWeight: '700',
-    color: TIMER_COLORS.danger,
+    color: colors.error,
   },
 
   // Event badge
@@ -667,14 +700,7 @@ const styles = StyleSheet.create({
   },
   linearProgress: {
     height: '100%',
-    backgroundColor: TIMER_COLORS.accent,
     borderRadius: borderRadius.full,
-  },
-  linearProgressWarning: {
-    backgroundColor: TIMER_COLORS.warning,
-  },
-  linearProgressDone: {
-    backgroundColor: TIMER_COLORS.danger,
   },
   progressPercentText: {
     position: 'absolute',
@@ -685,7 +711,7 @@ const styles = StyleSheet.create({
     color: colors.gray[500],
   },
 
-  // Control buttons - Block style
+  // Control buttons
   controlButtons: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -697,16 +723,12 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: TIMER_COLORS.accent,
     justifyContent: 'center',
     alignItems: 'center',
     ...shadows.lg,
   },
-  controlButtonPause: {
-    backgroundColor: TIMER_COLORS.warning,
-  },
   controlButtonResume: {
-    backgroundColor: TIMER_COLORS.success,
+    backgroundColor: colors.success,
   },
   controlButtonSecondary: {
     width: 56,
@@ -720,7 +742,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 16,
-    backgroundColor: TIMER_COLORS.danger + '15',
+    backgroundColor: colors.errorSoft,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -733,7 +755,7 @@ const styles = StyleSheet.create({
   controlButtonLabelDanger: {
     fontSize: 10,
     fontWeight: '600',
-    color: TIMER_COLORS.danger,
+    color: colors.error,
     marginTop: 2,
   },
 
@@ -746,12 +768,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
   },
   sectionTitle: {
     fontSize: typography.fontSize.base,
     fontWeight: '600',
     color: colors.gray[900],
+  },
+  sectionDescription: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[500],
+    marginBottom: spacing.md,
   },
   presetsGrid: {
     flexDirection: 'row',
@@ -763,13 +790,20 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     backgroundColor: colors.primarySoft,
     borderRadius: borderRadius.full,
-    borderWidth: 1,
-    borderColor: colors.primary + '30',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  presetButtonSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
   },
   presetText: {
     fontSize: typography.fontSize.base,
     fontWeight: '600',
     color: colors.primary,
+  },
+  presetTextSelected: {
+    color: colors.white,
   },
 
   // Custom input
@@ -808,20 +842,20 @@ const styles = StyleSheet.create({
     color: colors.gray[400],
     marginBottom: spacing.md,
   },
-  startButton: {
+  setButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.secondary,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
     marginLeft: 'auto',
   },
-  startButtonDisabled: {
+  setButtonDisabled: {
     backgroundColor: colors.gray[300],
   },
-  startButtonText: {
+  setButtonText: {
     fontSize: typography.fontSize.base,
     fontWeight: '600',
     color: colors.white,
@@ -832,7 +866,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: spacing.md,
     marginBottom: spacing.md,
-    backgroundColor: colors.warning + '10',
+    backgroundColor: colors.warningSoft,
     borderColor: colors.warning + '30',
   },
   warningIcon: {
