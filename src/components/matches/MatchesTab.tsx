@@ -168,11 +168,29 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
   };
 
   const handleUpdateScore = async (matchId: string) => {
-    const team1Score = parseInt(editScores.team1, 10);
-    const team2Score = parseInt(editScores.team2, 10);
+    // 空白を除去して検証
+    const team1Input = editScores.team1.trim();
+    const team2Input = editScores.team2.trim();
 
+    // 両方のスコアが入力されているかチェック
+    if (team1Input === '' || team2Input === '') {
+      showAlert('エラー', '両チームのスコアを入力してください');
+      return;
+    }
+
+    // 数値として解析（0も有効なスコア）
+    const team1Score = parseInt(team1Input, 10);
+    const team2Score = parseInt(team2Input, 10);
+
+    // 有効な数値かチェック
     if (isNaN(team1Score) || isNaN(team2Score)) {
-      showAlert('エラー', '有効なスコアを入力してください');
+      showAlert('エラー', 'スコアは数字で入力してください');
+      return;
+    }
+
+    // 負の数はエラー
+    if (team1Score < 0 || team2Score < 0) {
+      showAlert('エラー', 'スコアは0以上の数字で入力してください');
       return;
     }
 
@@ -1191,51 +1209,61 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.gray[200],
   },
   teamInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     flex: 1,
+    minWidth: 0,
   },
   teamColorIndicator: {
     width: 12,
     height: 12,
     borderRadius: 6,
+    flexShrink: 0,
   },
   teamName: {
     fontSize: typography.fontSize.base,
     fontWeight: '500',
     color: colors.gray[900],
+    flex: 1,
   },
   score: {
     fontSize: typography.fontSize.xl,
     fontWeight: '700',
     color: colors.gray[900],
-    minWidth: 40,
-    textAlign: 'right',
+    minWidth: 50,
+    textAlign: 'center',
+    flexShrink: 0,
   },
   scoreInput: {
-    fontSize: typography.fontSize.xl,
+    fontSize: typography.fontSize.lg,
     fontWeight: '700',
     color: colors.gray[900],
-    minWidth: 60,
-    textAlign: 'right',
-    borderWidth: 1,
+    width: 60,
+    height: 40,
+    textAlign: 'center',
+    borderWidth: 2,
     borderColor: colors.primary,
     borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
     backgroundColor: colors.white,
+    flexShrink: 0,
   },
   vsDivider: {
     alignItems: 'center',
-    paddingVertical: spacing.xs,
+    paddingVertical: 2,
   },
   vsText: {
     fontSize: typography.fontSize.xs,
     color: colors.gray[400],
-    fontWeight: '600',
+    fontWeight: '500',
   },
   matchActions: {
     flexDirection: 'row',
