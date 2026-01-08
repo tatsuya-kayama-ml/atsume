@@ -21,6 +21,7 @@ interface InputProps extends TextInputProps {
   suffix?: string;
   containerStyle?: ViewStyle;
   variant?: 'default' | 'filled';
+  required?: boolean;
 }
 
 export const Input: React.FC<InputProps> = ({
@@ -34,6 +35,7 @@ export const Input: React.FC<InputProps> = ({
   containerStyle,
   secureTextEntry,
   variant = 'default',
+  required = false,
   ...props
 }) => {
   const [isFocused, setIsFocused] = useState(false);
@@ -80,6 +82,7 @@ export const Input: React.FC<InputProps> = ({
       {label && (
         <Text style={[styles.label, error && styles.labelError]}>
           {label}
+          {required && <Text style={styles.requiredAsterisk}> *</Text>}
         </Text>
       )}
       <View
@@ -147,6 +150,10 @@ const styles = StyleSheet.create({
   },
   labelError: {
     color: colors.error,
+  },
+  requiredAsterisk: {
+    color: colors.error,
+    fontWeight: '600',
   },
   inputContainer: {
     flexDirection: 'row',

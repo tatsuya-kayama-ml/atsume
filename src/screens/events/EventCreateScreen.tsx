@@ -213,6 +213,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
                 onBlur={onBlur}
                 error={errors.name?.message}
                 variant="filled"
+                required
               />
             )}
           />
@@ -245,7 +246,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
 
           <View style={styles.dateTimeContainer}>
             <View style={styles.dateTimeItem}>
-              <Text style={styles.inputLabel}>日付</Text>
+              <Text style={styles.inputLabel}>日付<Text style={styles.requiredMark}> *</Text></Text>
               <TouchableOpacity
                 style={styles.dateTimeButton}
                 activeOpacity={0.7}
@@ -256,7 +257,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
               </TouchableOpacity>
             </View>
             <View style={styles.dateTimeItem}>
-              <Text style={styles.inputLabel}>時間</Text>
+              <Text style={styles.inputLabel}>時間<Text style={styles.requiredMark}> *</Text></Text>
               <TouchableOpacity
                 style={styles.dateTimeButton}
                 activeOpacity={0.7}
@@ -280,6 +281,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
                 onBlur={onBlur}
                 error={errors.location?.message}
                 variant="filled"
+                required
               />
             )}
           />
@@ -706,6 +708,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.gray[700],
     marginBottom: spacing.sm,
+  },
+  requiredMark: {
+    color: colors.error,
+    fontWeight: '600',
   },
   dateTimeContainer: {
     flexDirection: 'row',

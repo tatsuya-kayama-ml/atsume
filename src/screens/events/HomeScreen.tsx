@@ -33,6 +33,7 @@ import { Card, Badge, Avatar, SkeletonList, AnimatedRefreshControl, Tooltip } fr
 import { useTooltip } from '../../hooks/useTooltip';
 import { Event, RootStackParamList } from '../../types';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
+import { formatDateTime } from '../../utils/dateFormat';
 
 // Configure Japanese locale for calendar
 LocaleConfig.locales['ja'] = {
@@ -51,30 +52,6 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
-
-const formatDate = (dateString: string): { date: string; time: string; isToday: boolean; isTomorrow: boolean } => {
-  const date = new Date(dateString);
-  const today = new Date();
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const isToday = date.toDateString() === today.toDateString();
-  const isTomorrow = date.toDateString() === tomorrow.toDateString();
-
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
-  const weekday = weekdays[date.getDay()];
-
-  return {
-    date: isToday ? '今日' : isTomorrow ? '明日' : `${month}/${day}(${weekday})`,
-    time: `${hours}:${minutes}`,
-    isToday,
-    isTomorrow,
-  };
-};
 
 const getStatusConfig = (status: string) => {
   switch (status) {
@@ -194,7 +171,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   const renderEventItem = ({ item, index }: { item: Event; index: number }) => {
     const isOrganizer = item.organizer_id === user?.id;
-    const { date, time, isToday, isTomorrow } = formatDate(item.date_time);
+    const { date, time, isToday, isTomorrow } = formatDateTime(item.date_time);
     const statusConfig = getStatusConfig(item.status);
     const isPast = item.status === 'completed';
 
