@@ -435,7 +435,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     try {
       await checkInParticipant(participantId, attended);
     } catch (error: any) {
-      showToast(error.message || 'チェックインに失敗しました', 'error');
+      showToast(error.message || '出欠の記録に失敗しました', 'error');
     }
   };
 
@@ -647,10 +647,10 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             </View>
             <View style={styles.checkInModeTextContainer}>
               <Text style={[styles.checkInModeToggleTitle, checkInMode && styles.checkInModeToggleTitleActive]}>
-                出席確認モード
+                実際の出席を記録
               </Text>
               <Text style={[styles.checkInModeToggleSubtitle, checkInMode && styles.checkInModeToggleSubtitleActive]}>
-                {checkInMode ? '出席/欠席をチェック中' : 'タップしてモードを開始'}
+                {checkInMode ? '当日の出欠を記録中' : 'タップして記録を開始'}
               </Text>
             </View>
             <View style={[styles.checkInModeBadge, checkInMode && styles.checkInModeBadgeActive]}>
@@ -987,6 +987,15 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     }
   };
 
+  const handleRevertPayment = async (participantId: string) => {
+    try {
+      await updatePaymentStatus(participantId, 'unpaid');
+      await fetchParticipants(eventId);
+    } catch (error: any) {
+      Alert.alert('エラー', error.message);
+    }
+  };
+
   const getPaymentConfig = (status: string) => {
     switch (status) {
       case 'paid':
@@ -1180,7 +1189,18 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                     </View>
                   </View>
                 </View>
-                <Text style={styles.paidAmount}>¥{currentEvent?.fee.toLocaleString()}</Text>
+                <View style={styles.paymentItemRight}>
+                  <Text style={styles.paidAmount}>¥{currentEvent?.fee.toLocaleString()}</Text>
+                  {isOrganizer && (
+                    <TouchableOpacity
+                      style={styles.revertPaymentButton}
+                      onPress={() => handleRevertPayment(participant.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.revertPaymentButtonText}>取消</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
             );
           })}
@@ -2559,6 +2579,22 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
     color: colors.white,
+  },
+  paymentItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  revertPaymentButton: {
+    backgroundColor: colors.gray[200],
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+  },
+  revertPaymentButtonText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '500',
+    color: colors.gray[600],
   },
   paidAmount: {
     fontSize: typography.fontSize.base,
