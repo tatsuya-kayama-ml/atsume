@@ -171,7 +171,7 @@ export const useTeamStore = create<TeamState>((set, get) => ({
       set((state) => ({
         teams: state.teams.map((team) =>
           team.id === teamId ? { ...team, ...data } : team
-        ),
+        ) as TeamWithMembers[],
         isLoading: false,
       }));
     } catch (error: any) {

@@ -168,14 +168,10 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
       const event = await createEvent(eventData);
       logger.log('[EventCreate] Event created successfully:', event?.id);
 
-      // 成功トースト表示
-      showToast('イベントを作成しました', 'success');
-
       // 作成成功後、ホームに戻る
       navigation.goBack();
     } catch (error: any) {
       logger.error('[EventCreate] Error creating event:', error);
-      // エラートースト表示
       showToast(error.message || 'イベントの作成に失敗しました', 'error');
     }
   };

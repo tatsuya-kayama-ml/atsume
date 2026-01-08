@@ -48,13 +48,22 @@
               "scheme": "atsume"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2e72e6f1-c886-4bb1-8e46-91add7dc6114"
+      }
+    },
+    "owner": "aireal"
   }
 }

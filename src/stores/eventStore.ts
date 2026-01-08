@@ -37,6 +37,9 @@ interface EventState {
   checkInParticipant: (participantId: string, attended: boolean) => Promise<void>;
   bulkCheckIn: (participantIds: string[], attended: boolean) => Promise<void>;
 
+  // Event lookup
+  findEventByCode: (code: string) => Promise<{ event: Event; needsPassword: boolean } | null>;
+
   // Utility
   clearError: () => void;
   clearCurrentEvent: () => void;
@@ -163,6 +166,7 @@ export const useEventStore = create<EventState>((set, get) => ({
         capacity: data.capacity || null,
         event_code: eventCode,
         password_hash: passwordHash,
+        password: data.password || null, // Store plain password for display to participants
         invite_link: inviteLink,
         status: 'open' as EventStatus,
         timer_position: 'bottom',
@@ -632,6 +636,7 @@ export const useEventStore = create<EventState>((set, get) => ({
         organizer_id: originalEvent.organizer_id,
         event_code: eventCode,
         password_hash: originalEvent.password_hash,
+        password: originalEvent.password, // Copy plain password as well
         invite_link: inviteLink,
         status: 'open' as const,
         skill_level_settings: originalEvent.skill_level_settings,
@@ -728,6 +733,32 @@ export const useEventStore = create<EventState>((set, get) => ({
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;
+    }
+  },
+
+  findEventByCode: async (code: string) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const { data: event, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('event_code', code.toUpperCase())
+        .single();
+
+      set({ isLoading: false });
+
+      if (error || !event) {
+        return null;
+      }
+
+      return {
+        event,
+        needsPassword: !!event.password_hash,
+      };
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      return null;
     }
   },
 

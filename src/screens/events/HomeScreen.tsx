@@ -28,7 +28,9 @@ import { Calendar as CalendarIcon, MapPin, Banknote, Users, Ticket, Plus, Chevro
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
-import { Card, Badge, Avatar, SkeletonList, AnimatedRefreshControl } from '../../components/common';
+import { TOOLTIP_CONTENT } from '../../stores/onboardingStore';
+import { Card, Badge, Avatar, SkeletonList, AnimatedRefreshControl, Tooltip } from '../../components/common';
+import { useTooltip } from '../../hooks/useTooltip';
 import { Event, RootStackParamList } from '../../types';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 
@@ -77,15 +79,9 @@ const formatDate = (dateString: string): { date: string; time: string; isToday: 
 const getStatusConfig = (status: string) => {
   switch (status) {
     case 'open':
-      return { color: 'success' as const, label: '募集中' };
-    case 'in_progress':
-      return { color: 'primary' as const, label: '開催中' };
+      return { color: 'success' as const, label: '実施予定' };
     case 'completed':
       return { color: 'default' as const, label: '終了' };
-    case 'closed':
-      return { color: 'error' as const, label: '締切' };
-    case 'draft':
-      return { color: 'default' as const, label: '下書き' };
     default:
       return { color: 'default' as const, label: status };
   }
@@ -97,6 +93,28 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showPastEvents, setShowPastEvents] = useState(false);
+
+  // Tooltips
+  const createTooltip = useTooltip('home_create_event');
+  const joinTooltip = useTooltip('home_join_event');
+
+  // Filter events by status
+  const activeEvents = useMemo(() =>
+    events.filter(e => e.status === 'open'),
+    [events]
+  );
+
+  const pastEvents = useMemo(() =>
+    events.filter(e => e.status === 'completed'),
+    [events]
+  );
+
+  // Calculate participating events (not organized by me)
+  const participatingEvents = useMemo(() =>
+    activeEvents.filter(e => e.organizer_id !== user?.id),
+    [activeEvents, user?.id]
+  );
 
   // Create marked dates for calendar
   const markedDates = useMemo(() => {
@@ -354,32 +372,45 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Stats cards */}
-        <View style={styles.statsContainer}>
-          <View style={[styles.statCard, styles.statCardPrimary]}>
-            <View style={styles.statIconContainer}>
-              <CalendarIcon size={18} color={colors.primary} />
+        {/* Stats cards - 2x2 Grid */}
+        <View style={styles.statsGrid}>
+          <View style={styles.statsRow}>
+            <View style={[styles.statCard, styles.statCardPrimary]}>
+              <View style={styles.statIconContainer}>
+                <CalendarIcon size={18} color={colors.primary} />
+              </View>
+              <Text style={styles.statValue}>{activeEvents.length}</Text>
+              <Text style={styles.statLabel}>実施予定</Text>
             </View>
-            <Text style={styles.statValue}>{events.length}</Text>
-            <Text style={styles.statLabel}>参加イベント</Text>
+            <View style={[styles.statCard, styles.statCardSecondary]}>
+              <View style={[styles.statIconContainer, styles.statIconContainerAlt]}>
+                <Users size={18} color={colors.success} />
+              </View>
+              <Text style={styles.statValue}>
+                {activeEvents.filter(e => e.organizer_id === user?.id).length}
+              </Text>
+              <Text style={styles.statLabel}>主催</Text>
+            </View>
           </View>
-          <View style={[styles.statCard, styles.statCardSecondary]}>
-            <View style={[styles.statIconContainer, styles.statIconContainerAlt]}>
-              <Users size={18} color={colors.success} />
+          <View style={styles.statsRow}>
+            <View style={[styles.statCard, styles.statCardInfo]}>
+              <View style={[styles.statIconContainer, styles.statIconContainerInfo]}>
+                <Ticket size={18} color={colors.info} />
+              </View>
+              <Text style={styles.statValue}>
+                {participatingEvents.length}
+              </Text>
+              <Text style={styles.statLabel}>参加</Text>
             </View>
-            <Text style={styles.statValue}>
-              {events.filter(e => e.organizer_id === user?.id).length}
-            </Text>
-            <Text style={styles.statLabel}>主催</Text>
-          </View>
-          <View style={[styles.statCard, styles.statCardTertiary]}>
-            <View style={[styles.statIconContainer, styles.statIconContainerWarn]}>
-              <Ticket size={18} color={colors.warning} />
+            <View style={[styles.statCard, styles.statCardTertiary]}>
+              <View style={[styles.statIconContainer, styles.statIconContainerWarn]}>
+                <CalendarIcon size={18} color={colors.gray[500]} />
+              </View>
+              <Text style={styles.statValue}>
+                {pastEvents.length}
+              </Text>
+              <Text style={styles.statLabel}>終了</Text>
             </View>
-            <Text style={styles.statValue}>
-              {events.filter(e => e.status === 'open').length}
-            </Text>
-            <Text style={styles.statLabel}>募集中</Text>
           </View>
         </View>
       </Animated.View>
@@ -483,12 +514,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       ) : viewMode === 'calendar' ? (
         renderCalendarView()
       ) : (
-        <FlatList
-          data={events}
-          renderItem={renderEventItem}
-          keyExtractor={(item) => item.id}
+        <ScrollView
+          style={styles.listScrollView}
           contentContainerStyle={styles.listContent}
-          ListEmptyComponent={renderEmptyState}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <AnimatedRefreshControl
@@ -496,40 +524,111 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
               onRefresh={fetchMyEvents}
             />
           }
-        />
+        >
+          {/* Active Events */}
+          {activeEvents.length === 0 && pastEvents.length === 0 ? (
+            renderEmptyState()
+          ) : activeEvents.length === 0 ? (
+            <View style={styles.noActiveEventsCard}>
+              <Text style={styles.noActiveEventsText}>実施予定のイベントはありません</Text>
+            </View>
+          ) : (
+            activeEvents.map((event, index) => (
+              <View key={event.id}>
+                {renderEventItem({ item: event, index })}
+              </View>
+            ))
+          )}
+
+          {/* Past Events Section */}
+          {pastEvents.length > 0 && (
+            <View style={styles.pastEventsSection}>
+              <TouchableOpacity
+                style={styles.pastEventsHeader}
+                onPress={() => setShowPastEvents(!showPastEvents)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.pastEventsTitle}>
+                  過去のイベント ({pastEvents.length})
+                </Text>
+                <ChevronRight
+                  size={20}
+                  color={colors.gray[400]}
+                  style={{
+                    transform: [{ rotate: showPastEvents ? '90deg' : '0deg' }],
+                  }}
+                />
+              </TouchableOpacity>
+
+              {showPastEvents && (
+                <View style={styles.pastEventsList}>
+                  {pastEvents.map((event, index) => (
+                    <View key={event.id}>
+                      {renderEventItem({ item: event, index })}
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
+          <View style={{ height: 140 }} />
+        </ScrollView>
       )}
 
       <Animated.View
         entering={FadeInUp.delay(300).springify()}
         style={[styles.fabContainer, { bottom: insets.bottom + spacing.lg }]}
       >
-        <AnimatedPressable
-          style={[styles.fabSecondary, secondaryFabAnimatedStyle]}
-          onPress={handleSecondaryFabPress}
-          onPressIn={() => {
-            secondaryFabScale.value = withSpring(0.92, { damping: 15, stiffness: 300 });
-          }}
-          onPressOut={() => {
-            secondaryFabScale.value = withSpring(1, { damping: 15, stiffness: 300 });
-          }}
-        >
-          <Ticket size={18} color={colors.gray[700]} style={styles.fabIconStyle} />
-          <Text style={styles.fabSecondaryText}>参加する</Text>
-        </AnimatedPressable>
-        <AnimatedPressable
-          style={[styles.fab, primaryFabAnimatedStyle]}
-          onPress={handlePrimaryFabPress}
-          onPressIn={() => {
-            primaryFabScale.value = withSpring(0.92, { damping: 15, stiffness: 300 });
-          }}
-          onPressOut={() => {
-            primaryFabScale.value = withSpring(1, { damping: 15, stiffness: 300 });
-          }}
-        >
-          <Plus size={18} color={colors.white} style={styles.fabIconStyle} />
-          <Text style={styles.fabText}>作成する</Text>
-        </AnimatedPressable>
+        <View ref={joinTooltip.ref} collapsable={false}>
+          <AnimatedPressable
+            style={[styles.fabSecondary, secondaryFabAnimatedStyle]}
+            onPress={handleSecondaryFabPress}
+            onPressIn={() => {
+              secondaryFabScale.value = withSpring(0.92, { damping: 15, stiffness: 300 });
+            }}
+            onPressOut={() => {
+              secondaryFabScale.value = withSpring(1, { damping: 15, stiffness: 300 });
+            }}
+          >
+            <Ticket size={18} color={colors.gray[700]} style={styles.fabIconStyle} />
+            <Text style={styles.fabSecondaryText}>参加する</Text>
+          </AnimatedPressable>
+        </View>
+        <View ref={createTooltip.ref} collapsable={false}>
+          <AnimatedPressable
+            style={[styles.fab, primaryFabAnimatedStyle]}
+            onPress={handlePrimaryFabPress}
+            onPressIn={() => {
+              primaryFabScale.value = withSpring(0.92, { damping: 15, stiffness: 300 });
+            }}
+            onPressOut={() => {
+              primaryFabScale.value = withSpring(1, { damping: 15, stiffness: 300 });
+            }}
+          >
+            <Plus size={18} color={colors.white} style={styles.fabIconStyle} />
+            <Text style={styles.fabText}>作成する</Text>
+          </AnimatedPressable>
+        </View>
       </Animated.View>
+
+      {/* Tooltips */}
+      <Tooltip
+        visible={createTooltip.isVisible}
+        title={TOOLTIP_CONTENT.home_create_event.title}
+        message={TOOLTIP_CONTENT.home_create_event.message}
+        onDismiss={createTooltip.dismiss}
+        targetRect={createTooltip.targetRect}
+        position="top"
+      />
+      <Tooltip
+        visible={joinTooltip.isVisible}
+        title={TOOLTIP_CONTENT.home_join_event.title}
+        message={TOOLTIP_CONTENT.home_join_event.message}
+        onDismiss={joinTooltip.dismiss}
+        targetRect={joinTooltip.targetRect}
+        position="top"
+      />
     </View>
   );
 };
@@ -610,7 +709,10 @@ const styles = StyleSheet.create({
   viewModeButtonActive: {
     backgroundColor: colors.primary,
   },
-  statsContainer: {
+  statsGrid: {
+    gap: spacing.sm,
+  },
+  statsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
@@ -627,8 +729,11 @@ const styles = StyleSheet.create({
   statCardSecondary: {
     backgroundColor: colors.success + '08',
   },
+  statCardInfo: {
+    backgroundColor: colors.info + '08',
+  },
   statCardTertiary: {
-    backgroundColor: colors.warning + '08',
+    backgroundColor: colors.gray[100],
   },
   statIconContainer: {
     width: 32,
@@ -642,8 +747,11 @@ const styles = StyleSheet.create({
   statIconContainerAlt: {
     backgroundColor: colors.success + '15',
   },
+  statIconContainerInfo: {
+    backgroundColor: colors.info + '15',
+  },
   statIconContainerWarn: {
-    backgroundColor: colors.warning + '15',
+    backgroundColor: colors.gray[200],
   },
   statValue: {
     fontSize: typography.fontSize.xl,
@@ -888,5 +996,44 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: typography.fontSize.xs,
     color: colors.gray[500],
+  },
+  // List view styles
+  listScrollView: {
+    flex: 1,
+  },
+  noActiveEventsCard: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.xl,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    ...shadows.sm,
+  },
+  noActiveEventsText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+  },
+  // Past events section
+  pastEventsSection: {
+    marginTop: spacing.md,
+  },
+  pastEventsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.sm,
+    ...shadows.sm,
+  },
+  pastEventsTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[600],
+  },
+  pastEventsList: {
+    gap: 0,
   },
 });

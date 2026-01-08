@@ -180,8 +180,10 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
 
       // Hash new password if provided, otherwise keep existing
       let passwordHash: string | null = currentEvent?.password_hash || null;
+      let plainPassword: string | null = currentEvent?.password || null;
       if (data.password) {
         passwordHash = await hashPassword(data.password);
+        plainPassword = data.password; // Store plain password for display to participants
       }
 
       const updateData = {
@@ -192,17 +194,12 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
         fee: data.fee ? Number(data.fee) : 0,
         capacity: data.capacity ? Number(data.capacity) : null,
         password_hash: passwordHash,
+        password: plainPassword,
         skill_level_settings: skillSettings,
         gender_settings: genderSettingsData,
       };
 
       await updateEvent(eventId, updateData);
-
-      if (typeof window !== 'undefined') {
-        window.alert('イベントを更新しました');
-      } else {
-        Alert.alert('完了', 'イベントを更新しました');
-      }
       navigation.goBack();
     } catch (error: any) {
       logger.error('[EventEdit] Error updating event:', error);

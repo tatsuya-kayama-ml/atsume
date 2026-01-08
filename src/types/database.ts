@@ -2,7 +2,7 @@
 
 export type AttendanceStatus = 'pending' | 'attending' | 'not_attending' | 'maybe';
 export type PaymentStatus = 'unpaid' | 'pending_confirmation' | 'paid';
-export type EventStatus = 'draft' | 'open' | 'closed' | 'in_progress' | 'completed';
+export type EventStatus = 'open' | 'completed'; // 実施予定 | 終了
 export type TournamentFormat =
   | 'single_elimination'      // シングルエリミネーション（従来のトーナメント）
   | 'double_elimination'      // ダブルエリミネーション
@@ -61,6 +61,7 @@ export interface Event {
   capacity: number | null;
   event_code: string;
   password_hash: string | null;
+  password: string | null; // Plain text password for display to participants
   invite_link: string;
   status: EventStatus;
   timer_position: TimerPosition;

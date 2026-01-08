@@ -80,11 +80,9 @@ const formatDateTime = (dateString: string): { date: string; time: string; short
   };
 };
 
-// Status options for the event
+// Status options for the event (simplified to 2 options)
 const STATUS_OPTIONS = [
-  { value: 'open', label: '募集中', color: colors.success },
-  { value: 'in_progress', label: '開催中', color: colors.primary },
-  { value: 'closed', label: '締切', color: colors.error },
+  { value: 'open', label: '実施予定', color: colors.success },
   { value: 'completed', label: '終了', color: colors.gray[500] },
 ] as const;
 
@@ -93,7 +91,6 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const { currentEvent, participants, fetchEventById, fetchParticipants, updateEventStatus, isLoading } = useEventStore();
   const { user } = useAuthStore();
   const { showToast } = useToast();
-  const [showStatusPicker, setShowStatusPicker] = React.useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -108,24 +105,13 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const { date, time } = formatDateTime(currentEvent.date_time);
 
   const handleStatusChange = async (newStatus: string) => {
+    if (newStatus === currentEvent.status) return;
     try {
       await updateEventStatus(eventId, newStatus as any);
-      setShowStatusPicker(false);
-      if (Platform.OS === 'web') {
-        window.alert('ステータスを更新しました');
-      } else {
-        Alert.alert('完了', 'ステータスを更新しました');
-      }
     } catch (error: any) {
-      if (Platform.OS === 'web') {
-        window.alert(`エラー: ${error.message}`);
-      } else {
-        Alert.alert('エラー', error.message);
-      }
+      showToast(`エラー: ${error.message}`, 'error');
     }
   };
-
-  const currentStatusConfig = STATUS_OPTIONS.find(s => s.value === currentEvent.status) || STATUS_OPTIONS[0];
 
   const attendingCount = participants.filter((p) => p.attendance_status === 'attending').length;
   const paidCount = participants.filter((p) => p.payment_status === 'paid').length;
@@ -143,7 +129,6 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const handleCopyCode = async () => {
     try {
       await Clipboard.setStringAsync(currentEvent.event_code);
-      showToast('招待コードをコピーしました', 'success');
     } catch (error) {
       showToast('コピーに失敗しました', 'error');
     }
@@ -166,50 +151,35 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
       }
       showsVerticalScrollIndicator={false}
     >
-      {/* Status Control (Organizer Only) */}
+      {/* Status Control (Organizer Only) - Simplified toggle */}
       {isOrganizer && (
         <Card variant="elevated" style={styles.statusControlCard}>
           <View style={styles.statusControlHeader}>
             <Text style={styles.statusControlTitle}>イベントステータス</Text>
-            <TouchableOpacity
-              style={[styles.currentStatusBadge, { backgroundColor: currentStatusConfig.color + '20' }]}
-              onPress={() => setShowStatusPicker(!showStatusPicker)}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.statusDot, { backgroundColor: currentStatusConfig.color }]} />
-              <Text style={[styles.currentStatusText, { color: currentStatusConfig.color }]}>
-                {currentStatusConfig.label}
-              </Text>
-              <Text style={styles.statusDropdownIcon}>{showStatusPicker ? '▲' : '▼'}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {showStatusPicker && (
-            <View style={styles.statusOptionsContainer}>
-              {STATUS_OPTIONS.map((status) => (
-                <TouchableOpacity
-                  key={status.value}
-                  style={[
-                    styles.statusOption,
-                    currentEvent.status === status.value && styles.statusOptionActive,
-                  ]}
-                  onPress={() => handleStatusChange(status.value)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.statusDot, { backgroundColor: status.color }]} />
-                  <Text style={[
-                    styles.statusOptionText,
-                    currentEvent.status === status.value && { color: status.color, fontWeight: '600' },
-                  ]}>
-                    {status.label}
-                  </Text>
-                  {currentEvent.status === status.value && (
-                    <Check size={16} color={status.color} />
-                  )}
-                </TouchableOpacity>
-              ))}
+            <View style={styles.statusToggleContainer}>
+              {STATUS_OPTIONS.map((status) => {
+                const isActive = currentEvent.status === status.value;
+                return (
+                  <TouchableOpacity
+                    key={status.value}
+                    style={[
+                      styles.statusToggleButton,
+                      isActive && { backgroundColor: status.color },
+                    ]}
+                    onPress={() => handleStatusChange(status.value)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[
+                      styles.statusToggleText,
+                      isActive && styles.statusToggleTextActive,
+                    ]}>
+                      {status.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-          )}
+          </View>
         </Card>
       )}
 
@@ -385,14 +355,20 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         </Card>
       )}
 
-      {/* Password Info */}
-      {currentEvent.password_hash && isOrganizer && (
+      {/* Password Info - Show to organizer and participants */}
+      {currentEvent.password_hash && (
         <Card variant="outlined" style={styles.passwordCard}>
           <View style={styles.passwordHeader}>
             <Lock size={20} color={colors.gray[500]} style={styles.passwordIconStyle} />
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.passwordTitle}>参加パスワード設定済み</Text>
               <Text style={styles.passwordSubtitle}>参加時にパスワードが必要です</Text>
+              {currentEvent.password && (isOrganizer || participants.some(p => p.user_id === user?.id)) && (
+                <View style={styles.passwordDisplayRow}>
+                  <Text style={styles.passwordLabel}>パスワード:</Text>
+                  <Text style={styles.passwordValue}>{currentEvent.password}</Text>
+                </View>
+              )}
             </View>
           </View>
         </Card>
@@ -428,7 +404,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   ) => {
     try {
       await addManualParticipant(eventId, name, options);
-      showToast(`${name}さんを追加しました`, 'success');
     } catch (error: any) {
       showToast(error.message || '追加に失敗しました', 'error');
       throw error;
@@ -459,7 +434,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const handleCheckIn = async (participantId: string, attended: boolean) => {
     try {
       await checkInParticipant(participantId, attended);
-      showToast(attended ? '出席を記録しました' : '欠席を記録しました', 'success');
     } catch (error: any) {
       showToast(error.message || 'チェックインに失敗しました', 'error');
     }
@@ -486,7 +460,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
       }
       showsVerticalScrollIndicator={false}
     >
-      {/* Join Event Card (Not Participating) */}
+      {/* Join Event Card (Not Participating - Non-organizer) */}
       {!myParticipation && !isOrganizer && (
         <Card variant="elevated" style={styles.joinEventCard}>
           <View style={styles.joinEventIconContainer}>
@@ -502,7 +476,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               try {
                 await useEventStore.getState().joinEvent(eventId);
                 await fetchParticipants(eventId);
-                showToast('イベントに参加しました', 'success');
               } catch (error: any) {
                 showToast(error.message || '参加に失敗しました', 'error');
               }
@@ -514,11 +487,45 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         </Card>
       )}
 
+      {/* Join Event Card (Organizer not participating) */}
+      {!myParticipation && isOrganizer && (
+        <Card variant="elevated" style={styles.joinEventCard}>
+          <View style={[styles.joinEventIconContainer, { backgroundColor: colors.primarySoft }]}>
+            <UserPlus size={32} color={colors.primary} />
+          </View>
+          <Text style={styles.joinEventTitle}>主催者として参加</Text>
+          <Text style={styles.joinEventMessage}>
+            自分も参加者として登録すると、出欠状況やスキルレベルを設定できます
+          </Text>
+          <Button
+            title="参加者として追加する"
+            onPress={async () => {
+              try {
+                await useEventStore.getState().joinEvent(eventId);
+                await fetchParticipants(eventId);
+              } catch (error: any) {
+                showToast(error.message || '追加に失敗しました', 'error');
+              }
+            }}
+            icon={<UserPlus size={18} color={colors.white} />}
+            fullWidth
+            size="lg"
+          />
+        </Card>
+      )}
+
       {/* My Status Card */}
-      {myParticipation && !isOrganizer && (
+      {myParticipation && (
         <Card variant="elevated" style={styles.myStatusCard}>
           <View style={styles.myStatusHeader}>
-            <Text style={styles.myStatusTitle}>あなたの出欠状況</Text>
+            <View style={styles.myStatusTitleRow}>
+              <Text style={styles.myStatusTitle}>あなたの出欠状況</Text>
+              {isOrganizer && (
+                <View style={styles.organizerBadge}>
+                  <Text style={styles.organizerBadgeText}>主催者</Text>
+                </View>
+              )}
+            </View>
             <Badge
               label={getStatusConfig(myParticipation.attendance_status).label}
               color={getStatusConfig(myParticipation.attendance_status).color}
@@ -966,30 +973,18 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     if (!myParticipation) return;
     try {
       await reportPayment(myParticipation.id);
-      Alert.alert('完了', '送金報告を送信しました');
     } catch (error: any) {
       Alert.alert('エラー', error.message);
     }
   };
 
-  const handleConfirmPayment = async (participantId: string, name: string) => {
-    Alert.alert(
-      '支払い確認',
-      `${name}さんの支払いを確認しますか？`,
-      [
-        { text: 'キャンセル', style: 'cancel' },
-        {
-          text: '確認する',
-          onPress: async () => {
-            try {
-              await confirmPayment(participantId);
-            } catch (error: any) {
-              Alert.alert('エラー', error.message);
-            }
-          },
-        },
-      ]
-    );
+  const handleConfirmPayment = async (participantId: string) => {
+    try {
+      await confirmPayment(participantId);
+      await fetchParticipants(eventId);
+    } catch (error: any) {
+      Alert.alert('エラー', error.message);
+    }
   };
 
   const getPaymentConfig = (status: string) => {
@@ -1143,10 +1138,10 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                 </View>
                 <TouchableOpacity
                   style={styles.confirmPaymentButton}
-                  onPress={() => handleConfirmPayment(participant.id, displayName)}
+                  onPress={() => handleConfirmPayment(participant.id)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.confirmPaymentButtonText}>確認</Text>
+                  <Text style={styles.confirmPaymentButtonText}>承認</Text>
                 </TouchableOpacity>
               </View>
             );
@@ -1732,11 +1727,6 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 onPress={() => {
                   duplicateEvent(eventId)
                     .then((newEvent) => {
-                      if (Platform.OS === 'web') {
-                        window.alert('イベントを複製しました');
-                      } else {
-                        Alert.alert('完了', 'イベントを複製しました');
-                      }
                       navigation.replace('EventDetail', { eventId: newEvent.id });
                     })
                     .catch((error: any) => {
@@ -2180,6 +2170,25 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.gray[500],
   },
+  passwordDisplayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[200],
+  },
+  passwordLabel: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[600],
+    marginRight: spacing.xs,
+  },
+  passwordValue: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 1,
+  },
 
   // Join Event Card
   joinEventCard: {
@@ -2221,10 +2230,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.md,
   },
+  myStatusTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   myStatusTitle: {
     fontSize: typography.fontSize.lg,
     fontWeight: '600',
     color: colors.gray[900],
+  },
+  organizerBadge: {
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  organizerBadgeText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.primary,
   },
   statusButtonsContainer: {
     flexDirection: 'row',
@@ -2536,49 +2561,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.gray[900],
   },
-  currentStatusBadge: {
+  statusToggleContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: colors.gray[100],
+    borderRadius: borderRadius.lg,
+    padding: 4,
+  },
+  statusToggleButton: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full,
+    borderRadius: borderRadius.md,
+    backgroundColor: 'transparent',
   },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: spacing.xs,
-  },
-  currentStatusText: {
+  statusToggleText: {
     fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-    marginRight: spacing.xs,
-  },
-  statusDropdownIcon: {
-    fontSize: 10,
+    fontWeight: '500',
     color: colors.gray[500],
   },
-  statusOptionsContainer: {
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
-  },
-  statusOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: borderRadius.lg,
-    marginBottom: spacing.xs,
-  },
-  statusOptionActive: {
-    backgroundColor: colors.gray[50],
-  },
-  statusOptionText: {
-    flex: 1,
-    fontSize: typography.fontSize.base,
-    color: colors.gray[700],
+  statusToggleTextActive: {
+    color: colors.white,
+    fontWeight: '600',
   },
 
   // Option Display (Skill Level, Gender)

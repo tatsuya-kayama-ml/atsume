@@ -60,7 +60,6 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const onSubmit = async (data: LoginFormData) => {
     try {
       await signIn(data.email, data.password);
-      showToast('ログインしました', 'success');
     } catch (error: any) {
       showToast(error.message || 'ログインに失敗しました', 'error');
     }

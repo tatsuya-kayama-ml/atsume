@@ -27,6 +27,7 @@ export interface EventFormData {
 export type RootStackParamList = {
   Splash: undefined;
   Auth: undefined;
+  Onboarding: undefined;
   Main: undefined;
   EventDetail: { eventId: string };
   EventCreate: undefined;
@@ -40,6 +41,7 @@ export type RootStackParamList = {
   ResetPassword: undefined;
   ProfileEdit: undefined;
   ChangePassword: undefined;
+  FAQ: undefined;
   Contact: undefined;
   NotificationSettings: undefined;
 };

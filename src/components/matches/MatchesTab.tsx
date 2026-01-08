@@ -583,7 +583,7 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
                 <Text style={[styles.standingsCell, styles.rankCell, styles.rankText]}>
                   {standing.rank}
                 </Text>
-                <View style={[styles.standingsCell, styles.teamCell, styles.teamNameCell]}>
+                <View style={[styles.teamCell, styles.teamNameCell]}>
                   <View
                     style={[styles.teamColorDot, { backgroundColor: standing.team?.color || colors.gray[300] }]}
                   />
@@ -1005,7 +1005,6 @@ const styles = StyleSheet.create({
   },
   teamCell: {
     flex: 1,
-    textAlign: 'left',
   },
   statCell: {
     width: 32,

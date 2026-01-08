@@ -87,8 +87,9 @@ const generateRoundRobinPairings = (teamIds: string[]): [string, string][][] => 
   return rounds;
 };
 
-// トーナメント方式のマッチング生成
-const generateTournamentBracket = (teamIds: string[], hasThirdPlaceMatch: boolean = false): Match[][] => {
+// トーナメント方式のマッチング生成（挿入用の部分的なマッチデータを生成）
+type PartialMatchData = { round: number; team1_id: string; team2_id: string; match_number: number };
+const generateTournamentBracket = (teamIds: string[], hasThirdPlaceMatch: boolean = false): PartialMatchData[][] => {
   const n = teamIds.length;
   // 2のべき乗に切り上げ
   const bracketSize = Math.pow(2, Math.ceil(Math.log2(n)));
@@ -101,13 +102,13 @@ const generateTournamentBracket = (teamIds: string[], hasThirdPlaceMatch: boolea
     seeds.push('BYE');
   }
 
-  const rounds: Match[][] = [];
+  const rounds: PartialMatchData[][] = [];
   let currentRound = seeds;
   let roundNumber = 1;
 
   while (currentRound.length > 1) {
     const nextRound: string[] = [];
-    const roundMatches: any[] = [];
+    const roundMatches: PartialMatchData[] = [];
 
     for (let i = 0; i < currentRound.length; i += 2) {
       const team1 = currentRound[i];
@@ -255,7 +256,9 @@ export const useMatchStore = create<MatchState>((set, get) => ({
       ];
 
       const teamsToInsert = participants?.map((participant, index) => {
-        const displayName = participant.display_name || participant.user?.display_name || '参加者';
+        const userObj = participant.user as unknown as { display_name: string } | { display_name: string }[] | null;
+        const userName = Array.isArray(userObj) ? userObj[0]?.display_name : userObj?.display_name;
+        const displayName = participant.display_name || userName || '参加者';
         return {
           event_id: eventId,
           name: displayName,

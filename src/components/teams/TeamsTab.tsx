@@ -34,23 +34,45 @@ interface TeamsTabProps {
 const TEAM_COUNT_OPTIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
-  const { teams, isLoading, fetchTeams, autoAssignTeams, deleteAllTeams, removeMemberFromTeam } = useTeamStore();
-  const { currentEvent, participants, fetchParticipants } = useEventStore();
+  const { teams, isLoading: teamLoading, fetchTeams, autoAssignTeams, deleteAllTeams, removeMemberFromTeam } = useTeamStore();
+  const { currentEvent, participants, fetchParticipants, isLoading: participantLoading } = useEventStore();
   const { user } = useAuthStore();
 
   const [showSettings, setShowSettings] = useState(false);
   const [selectedTeamCount, setSelectedTeamCount] = useState(4);
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const isOrganizer = currentEvent?.organizer_id === user?.id;
   const attendingParticipants = participants.filter((p) => p.attendance_status === 'attending');
 
   useFocusEffect(
     useCallback(() => {
-      fetchTeams(eventId);
-      fetchParticipants(eventId);
+      const loadData = async () => {
+        try {
+          await Promise.all([
+            fetchTeams(eventId).catch(() => {}),
+            fetchParticipants(eventId).catch(() => {}),
+          ]);
+        } catch {
+          // Ignore errors - they're handled in stores
+        }
+      };
+      loadData();
     }, [eventId])
   );
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        fetchTeams(eventId).catch(() => {}),
+        fetchParticipants(eventId).catch(() => {}),
+      ]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const toggleTeamExpanded = (teamId: string) => {
     setExpandedTeams((prev) => {
@@ -188,8 +210,8 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
         contentContainerStyle={styles.contentContainer}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading}
-            onRefresh={() => fetchTeams(eventId)}
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
             colors={[colors.primary]}
             tintColor={colors.primary}
           />
@@ -237,14 +259,14 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                 variant="outline"
                 icon={<Shuffle size={18} color={colors.primary} />}
                 style={styles.assignButton}
-                loading={isLoading}
+                loading={teamLoading}
               />
               <Button
                 title="スキル均等分け"
                 onPress={() => handleAutoAssign('balanced')}
                 icon={<Scale size={18} color={colors.white} />}
                 style={styles.assignButton}
-                loading={isLoading}
+                loading={teamLoading}
               />
             </View>
 
@@ -273,8 +295,8 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
       contentContainerStyle={styles.contentContainer}
       refreshControl={
         <RefreshControl
-          refreshing={isLoading}
-          onRefresh={() => fetchTeams(eventId)}
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
           colors={[colors.primary]}
           tintColor={colors.primary}
         />
@@ -329,14 +351,14 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                   variant="outline"
                   icon={<Shuffle size={16} color={colors.primary} />}
                   style={styles.assignButtonSmall}
-                  loading={isLoading}
+                  loading={teamLoading}
                 />
                 <Button
                   title="スキル均等"
                   onPress={() => handleAutoAssign('balanced')}
                   icon={<Scale size={16} color={colors.white} />}
                   style={styles.assignButtonSmall}
-                  loading={isLoading}
+                  loading={teamLoading}
                 />
               </View>
 

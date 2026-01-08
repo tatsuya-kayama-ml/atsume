@@ -6,9 +6,11 @@ import * as Linking from 'expo-linking';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigator } from './MainNavigator';
 import { EventCreateScreen, EventDetailScreen, EventEditScreen, JoinEventScreen } from '../screens/events';
-import { TermsOfServiceScreen, PrivacyPolicyScreen, ProfileEditScreen, ChangePasswordScreen, ContactScreen, NotificationSettingsScreen } from '../screens/settings';
+import { TermsOfServiceScreen, PrivacyPolicyScreen, ProfileEditScreen, ChangePasswordScreen, ContactScreen, NotificationSettingsScreen, FAQScreen } from '../screens/settings';
 import { ResetPasswordScreen } from '../screens/auth';
+import { OnboardingScreen } from '../screens/onboarding';
 import { useAuthStore } from '../stores/authStore';
+import { useOnboardingStore } from '../stores/onboardingStore';
 import { RootStackParamList } from '../types';
 import { colors } from '../constants/theme';
 
@@ -54,6 +56,7 @@ const linking = {
 
 export const RootNavigator: React.FC = () => {
   const { user, isLoading, isInitialized, isPasswordRecovery, initialize } = useAuthStore();
+  const hasCompletedWalkthrough = useOnboardingStore((s) => s.hasCompletedWalkthrough);
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
 
   useEffect(() => {
@@ -84,6 +87,13 @@ export const RootNavigator: React.FC = () => {
             }}
           />
         ) : user ? (
+          !hasCompletedWalkthrough ? (
+            <Stack.Screen
+              name="Onboarding"
+              component={OnboardingScreen}
+              options={{ headerShown: false, gestureEnabled: false }}
+            />
+          ) : (
           <>
             <Stack.Screen name="Main" component={MainNavigator} />
             <Stack.Screen
@@ -151,6 +161,14 @@ export const RootNavigator: React.FC = () => {
               }}
             />
             <Stack.Screen
+              name="FAQ"
+              component={FAQScreen}
+              options={{
+                ...modalScreenOptions,
+                title: 'よくある質問',
+              }}
+            />
+            <Stack.Screen
               name="Contact"
               component={ContactScreen}
               options={{
@@ -167,6 +185,7 @@ export const RootNavigator: React.FC = () => {
               }}
             />
           </>
+          )
         ) : (
           <Stack.Screen name="Auth" component={AuthNavigator} />
         )}

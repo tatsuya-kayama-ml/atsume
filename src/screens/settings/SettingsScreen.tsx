@@ -255,6 +255,16 @@ export const SettingsScreen: React.FC = () => {
 
           <TouchableOpacity
             style={styles.menuItem}
+            onPress={() => navigation.navigate('FAQ')}
+          >
+            <Text style={styles.menuLabel}>よくある質問</Text>
+            <Text style={styles.menuArrow}>›</Text>
+          </TouchableOpacity>
+
+          <View style={styles.menuDivider} />
+
+          <TouchableOpacity
+            style={styles.menuItem}
             onPress={() => navigation.navigate('Contact')}
           >
             <Text style={styles.menuLabel}>お問い合わせ</Text>
