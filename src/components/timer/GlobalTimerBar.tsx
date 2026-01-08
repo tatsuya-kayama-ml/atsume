@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withRepeat,
   withSequence,
   withTiming,
@@ -19,17 +18,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Play, Pause, X, Zap, AlertCircle } from 'lucide-react-native';
+import { Play, Pause, X, AlertCircle, Check } from 'lucide-react-native';
 import { useTimerStore, formatTime } from '../../stores/timerStore';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
-
-// Energetic accent colors (from UI Pro Max)
-const TIMER_COLORS = {
-  accent: '#F97316',
-  warning: '#FBBF24',
-  danger: '#EF4444',
-  success: '#22C55E',
-};
 
 interface GlobalTimerBarProps {
   onPress?: () => void;
@@ -45,38 +36,16 @@ export const GlobalTimerBar: React.FC<GlobalTimerBarProps> = ({
     activeTimer,
     pauseTimer,
     resumeTimer,
+    startPreparedTimer,
     stopTimer,
-    tick,
   } = useTimerStore();
-
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Animation values
   const pulseOpacity = useSharedValue(1);
   const progressWidth = useSharedValue(0);
 
-  // Timer tick effect
-  useEffect(() => {
-    if (activeTimer?.isRunning) {
-      intervalRef.current = setInterval(() => {
-        tick();
-      }, 1000);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [activeTimer?.isRunning, tick]);
-
   // Update progress
-  useEffect(() => {
+  React.useEffect(() => {
     if (activeTimer) {
       const progress = activeTimer.duration > 0
         ? (activeTimer.duration - activeTimer.remainingTime) / activeTimer.duration
@@ -86,7 +55,7 @@ export const GlobalTimerBar: React.FC<GlobalTimerBarProps> = ({
   }, [activeTimer?.remainingTime]);
 
   // Subtle pulse animation (per UX guidelines - not distracting)
-  useEffect(() => {
+  React.useEffect(() => {
     if (activeTimer?.isRunning) {
       pulseOpacity.value = withRepeat(
         withSequence(
@@ -115,7 +84,9 @@ export const GlobalTimerBar: React.FC<GlobalTimerBarProps> = ({
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    if (activeTimer.isRunning) {
+    if (activeTimer.isPrepared) {
+      startPreparedTimer();
+    } else if (activeTimer.isRunning) {
       pauseTimer();
     } else {
       resumeTimer();
@@ -131,11 +102,22 @@ export const GlobalTimerBar: React.FC<GlobalTimerBarProps> = ({
 
   const isAlmostDone = activeTimer.remainingTime <= 30 && activeTimer.remainingTime > 0;
   const isDone = activeTimer.remainingTime === 0;
+  const isPrepared = activeTimer.isPrepared;
 
   // Calculate remaining progress for visual display
   const remainingProgress = activeTimer.duration > 0
     ? activeTimer.remainingTime / activeTimer.duration
     : 0;
+
+  // 状態に応じた色（トンマナ統一）
+  const getStatusColor = () => {
+    if (isDone) return colors.error;
+    if (isAlmostDone) return colors.warning;
+    if (isPrepared) return colors.secondary;
+    return colors.primary;
+  };
+
+  const statusColor = getStatusColor();
 
   return (
     <Animated.View
@@ -146,15 +128,15 @@ export const GlobalTimerBar: React.FC<GlobalTimerBarProps> = ({
         { bottom: insets.bottom + bottomOffset + spacing.sm },
         isDone && styles.containerDone,
         isAlmostDone && styles.containerWarning,
+        isPrepared && styles.containerPrepared,
       ]}
     >
-      {/* Progress bar - shows remaining time */}
+      {/* Progress bar - shows elapsed time */}
       <Animated.View
         style={[
           styles.progressBar,
           progressAnimatedStyle,
-          isDone && styles.progressBarDone,
-          isAlmostDone && styles.progressBarWarning,
+          { backgroundColor: statusColor },
         ]}
       />
 
@@ -164,19 +146,20 @@ export const GlobalTimerBar: React.FC<GlobalTimerBarProps> = ({
         onPress={onPress}
         activeOpacity={0.9}
       >
-        {/* Energetic status indicator */}
+        {/* Status indicator */}
         <Animated.View
           style={[
             styles.statusIndicator,
-            isDone && styles.statusIndicatorDone,
-            isAlmostDone && styles.statusIndicatorWarning,
+            { backgroundColor: statusColor },
             pulseAnimatedStyle,
           ]}
         >
           {isDone ? (
             <AlertCircle size={16} color={colors.white} />
+          ) : isPrepared ? (
+            <Check size={16} color={colors.white} />
           ) : activeTimer.isRunning ? (
-            <Zap size={16} color={colors.white} />
+            <View style={styles.runningDot} />
           ) : (
             <Pause size={14} color={colors.white} />
           )}
@@ -193,11 +176,12 @@ export const GlobalTimerBar: React.FC<GlobalTimerBarProps> = ({
                 styles.timeText,
                 isDone && styles.timeTextDone,
                 isAlmostDone && styles.timeTextWarning,
+                isPrepared && styles.timeTextPrepared,
               ]}
             >
-              {isDone ? 'タイムアップ!' : formatTime(activeTimer.remainingTime)}
+              {isDone ? 'タイムアップ!' : isPrepared ? '準備完了' : formatTime(activeTimer.remainingTime)}
             </Text>
-            {!isDone && (
+            {!isDone && !isPrepared && (
               <Text style={styles.percentText}>
                 {Math.round(remainingProgress * 100)}%
               </Text>
@@ -205,13 +189,12 @@ export const GlobalTimerBar: React.FC<GlobalTimerBarProps> = ({
           </View>
         </View>
 
-        {/* Control buttons - Block style */}
+        {/* Control buttons */}
         <View style={styles.controls}>
           <TouchableOpacity
             style={[
               styles.controlButton,
-              activeTimer.isRunning && styles.controlButtonPause,
-              isDone && styles.controlButtonResume,
+              { backgroundColor: statusColor },
             ]}
             onPress={handlePlayPause}
             activeOpacity={0.7}
@@ -248,28 +231,22 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.gray[100],
   },
+  containerPrepared: {
+    borderColor: colors.secondary,
+  },
   containerWarning: {
-    borderColor: TIMER_COLORS.warning,
-    borderWidth: 3,
+    borderColor: colors.warning,
   },
   containerDone: {
-    borderColor: TIMER_COLORS.danger,
-    borderWidth: 3,
-    backgroundColor: '#FEF2F2',
+    borderColor: colors.error,
+    backgroundColor: colors.errorSoft,
   },
   progressBar: {
     position: 'absolute',
     top: 0,
     left: 0,
     height: 4,
-    backgroundColor: TIMER_COLORS.accent,
     borderTopLeftRadius: borderRadius.xl,
-  },
-  progressBarWarning: {
-    backgroundColor: TIMER_COLORS.warning,
-  },
-  progressBarDone: {
-    backgroundColor: TIMER_COLORS.danger,
   },
   content: {
     flexDirection: 'row',
@@ -282,16 +259,15 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: TIMER_COLORS.accent,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: spacing.md,
   },
-  statusIndicatorWarning: {
-    backgroundColor: TIMER_COLORS.warning,
-  },
-  statusIndicatorDone: {
-    backgroundColor: TIMER_COLORS.danger,
+  runningDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.white,
   },
   infoContainer: {
     flex: 1,
@@ -314,11 +290,16 @@ const styles = StyleSheet.create({
     color: colors.gray[900],
     fontVariant: ['tabular-nums'],
   },
+  timeTextPrepared: {
+    color: colors.secondary,
+    fontSize: typography.fontSize.base,
+    fontWeight: '700',
+  },
   timeTextWarning: {
-    color: TIMER_COLORS.warning,
+    color: colors.warning,
   },
   timeTextDone: {
-    color: TIMER_COLORS.danger,
+    color: colors.error,
   },
   percentText: {
     fontSize: typography.fontSize.sm,
@@ -334,16 +315,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: TIMER_COLORS.accent,
     justifyContent: 'center',
     alignItems: 'center',
     ...shadows.sm,
-  },
-  controlButtonPause: {
-    backgroundColor: TIMER_COLORS.warning,
-  },
-  controlButtonResume: {
-    backgroundColor: TIMER_COLORS.success,
   },
   closeButton: {
     width: 36,

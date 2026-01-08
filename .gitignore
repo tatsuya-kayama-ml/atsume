@@ -54,3 +54,4 @@ screenshots/
 
 # Icon output
 IconKitchen-Output/
+__pycache__/

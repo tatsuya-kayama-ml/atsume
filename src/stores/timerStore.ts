@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
 
 export interface TimerPreset {
   id: string;
@@ -12,8 +15,10 @@ export interface ActiveTimer {
   eventId: string;
   eventName: string;
   duration: number; // total duration in seconds
-  remainingTime: number; // remaining time in seconds
+  remainingTime: number; // remaining time in seconds (表示用)
+  remainingTimeAtStart: number; // 開始/再開時点の残り時間（計算用ベース）
   isRunning: boolean;
+  isPrepared: boolean; // タイマーがセットされているが開始されていない状態
   startedAt: number | null; // timestamp when started
   pausedAt: number | null; // timestamp when paused
 }
@@ -21,14 +26,21 @@ export interface ActiveTimer {
 interface TimerState {
   activeTimer: ActiveTimer | null;
   presets: TimerPreset[];
+  notificationEnabled: boolean;
 
   // Timer actions
+  prepareTimer: (eventId: string, eventName: string, duration: number) => void; // セットするだけ（開始しない）
   startTimer: (eventId: string, eventName: string, duration: number) => void;
+  startPreparedTimer: () => void; // 準備されたタイマーを開始
   pauseTimer: () => void;
   resumeTimer: () => void;
   stopTimer: () => void;
   resetTimer: () => void;
-  tick: () => void;
+  updateRemainingTime: () => void; // タイムスタンプベースの更新
+  onTimerComplete: () => void; // タイマー完了時の通知
+
+  // Settings
+  setNotificationEnabled: (enabled: boolean) => void;
 
   // Preset actions
   addPreset: (name: string, duration: number) => void;
@@ -46,35 +58,147 @@ const DEFAULT_PRESETS: TimerPreset[] = [
   { id: 'preset-30', name: '30分', duration: 30 * 60 },
 ];
 
+// タイマー完了時の通知音を再生
+const playCompletionSound = async () => {
+  try {
+    const { sound } = await Audio.Sound.createAsync(
+      // システム通知音的なビープ音を生成
+      { uri: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3' },
+      { shouldPlay: true, volume: 0.8 }
+    );
+    // 再生後にアンロード
+    sound.setOnPlaybackStatusUpdate((status) => {
+      if (status.isLoaded && status.didJustFinish) {
+        sound.unloadAsync();
+      }
+    });
+  } catch (error) {
+    console.warn('Failed to play completion sound:', error);
+  }
+};
+
+// タイマー完了時のバイブレーション
+const triggerCompletionHaptics = async () => {
+  if (Platform.OS === 'web') return;
+  try {
+    // 3回のバイブレーションパターン
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    setTimeout(async () => {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }, 300);
+    setTimeout(async () => {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }, 600);
+  } catch (error) {
+    console.warn('Failed to trigger haptics:', error);
+  }
+};
+
+// Interval管理用（グローバル）
+let timerInterval: ReturnType<typeof setInterval> | null = null;
+
+const startTimerInterval = (store: TimerState) => {
+  // 既存のintervalをクリア
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+
+  timerInterval = setInterval(() => {
+    store.updateRemainingTime();
+  }, 1000);
+};
+
+const stopTimerInterval = () => {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+};
+
 export const useTimerStore = create<TimerState>()(
   persist(
     (set, get) => ({
       activeTimer: null,
       presets: DEFAULT_PRESETS,
+      notificationEnabled: true,
 
-      startTimer: (eventId: string, eventName: string, duration: number) => {
+      // タイマーを準備する（開始しない）- プリセット押下時
+      prepareTimer: (eventId: string, eventName: string, duration: number) => {
+        stopTimerInterval();
         set({
           activeTimer: {
             eventId,
             eventName,
             duration,
             remainingTime: duration,
-            isRunning: true,
-            startedAt: Date.now(),
+            remainingTimeAtStart: duration,
+            isRunning: false,
+            isPrepared: true,
+            startedAt: null,
             pausedAt: null,
           },
         });
+      },
+
+      // タイマーを即座に開始（従来の動作）
+      startTimer: (eventId: string, eventName: string, duration: number) => {
+        const now = Date.now();
+        set({
+          activeTimer: {
+            eventId,
+            eventName,
+            duration,
+            remainingTime: duration,
+            remainingTimeAtStart: duration,
+            isRunning: true,
+            isPrepared: false,
+            startedAt: now,
+            pausedAt: null,
+          },
+        });
+        startTimerInterval(get());
+      },
+
+      // 準備されたタイマーを開始
+      startPreparedTimer: () => {
+        const { activeTimer } = get();
+        if (!activeTimer || !activeTimer.isPrepared) return;
+
+        const now = Date.now();
+        set({
+          activeTimer: {
+            ...activeTimer,
+            remainingTimeAtStart: activeTimer.remainingTime,
+            isRunning: true,
+            isPrepared: false,
+            startedAt: now,
+            pausedAt: null,
+          },
+        });
+        startTimerInterval(get());
       },
 
       pauseTimer: () => {
         const { activeTimer } = get();
         if (!activeTimer || !activeTimer.isRunning) return;
 
+        stopTimerInterval();
+        const now = Date.now();
+        // タイムスタンプベースで残り時間を計算（開始時点のベースから経過時間を引く）
+        const elapsed = activeTimer.startedAt
+          ? Math.floor((now - activeTimer.startedAt) / 1000)
+          : 0;
+        const newRemainingTime = Math.max(0, activeTimer.remainingTimeAtStart - elapsed);
+
         set({
           activeTimer: {
             ...activeTimer,
             isRunning: false,
-            pausedAt: Date.now(),
+            remainingTime: newRemainingTime,
+            remainingTimeAtStart: newRemainingTime,
+            pausedAt: now,
+            startedAt: null,
           },
         });
       },
@@ -83,17 +207,22 @@ export const useTimerStore = create<TimerState>()(
         const { activeTimer } = get();
         if (!activeTimer || activeTimer.isRunning) return;
 
+        const now = Date.now();
         set({
           activeTimer: {
             ...activeTimer,
+            remainingTimeAtStart: activeTimer.remainingTime,
             isRunning: true,
-            startedAt: Date.now(),
+            isPrepared: false,
+            startedAt: now,
             pausedAt: null,
           },
         });
+        startTimerInterval(get());
       },
 
       stopTimer: () => {
+        stopTimerInterval();
         set({ activeTimer: null });
       },
 
@@ -101,33 +230,47 @@ export const useTimerStore = create<TimerState>()(
         const { activeTimer } = get();
         if (!activeTimer) return;
 
+        stopTimerInterval();
         set({
           activeTimer: {
             ...activeTimer,
             remainingTime: activeTimer.duration,
+            remainingTimeAtStart: activeTimer.duration,
             isRunning: false,
+            isPrepared: true,
             startedAt: null,
             pausedAt: null,
           },
         });
       },
 
-      tick: () => {
-        const { activeTimer } = get();
-        if (!activeTimer || !activeTimer.isRunning) return;
+      // タイムスタンプベースで残り時間を更新
+      updateRemainingTime: () => {
+        const { activeTimer, onTimerComplete, notificationEnabled } = get();
+        if (!activeTimer || !activeTimer.isRunning || !activeTimer.startedAt) return;
 
-        const newRemainingTime = activeTimer.remainingTime - 1;
+        const now = Date.now();
+        const elapsed = Math.floor((now - activeTimer.startedAt) / 1000);
+        // 開始/再開時点のベース時間から経過時間を引く
+        const newRemainingTime = Math.max(0, activeTimer.remainingTimeAtStart - elapsed);
 
         if (newRemainingTime <= 0) {
-          // Timer completed
+          // タイマー完了
+          stopTimerInterval();
           set({
             activeTimer: {
               ...activeTimer,
               remainingTime: 0,
               isRunning: false,
+              isPrepared: false,
             },
           });
+          // 通知を発火
+          if (notificationEnabled) {
+            onTimerComplete();
+          }
         } else {
+          // 残り時間を更新（表示用）
           set({
             activeTimer: {
               ...activeTimer,
@@ -135,6 +278,19 @@ export const useTimerStore = create<TimerState>()(
             },
           });
         }
+      },
+
+      // タイマー完了時の通知
+      onTimerComplete: async () => {
+        // バイブレーションと音声を同時に
+        await Promise.all([
+          triggerCompletionHaptics(),
+          playCompletionSound(),
+        ]);
+      },
+
+      setNotificationEnabled: (enabled: boolean) => {
+        set({ notificationEnabled: enabled });
       },
 
       addPreset: (name: string, duration: number) => {
@@ -166,6 +322,7 @@ export const useTimerStore = create<TimerState>()(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         presets: state.presets,
+        notificationEnabled: state.notificationEnabled,
         // Don't persist activeTimer - it should be cleared on app restart
       }),
     }
