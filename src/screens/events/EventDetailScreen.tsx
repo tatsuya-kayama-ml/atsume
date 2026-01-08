@@ -50,7 +50,7 @@ import {
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useMatchStore } from '../../stores/matchStore';
-import { useTimerStore } from '../../stores/timerStore';
+import { useTimerStore, formatTime } from '../../stores/timerStore';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Card, Badge, Avatar, ContextHint } from '../../components/common';
 import { ReminderModal, AddParticipantModal, ParticipantDetailModal } from '../../components/events';
@@ -2283,6 +2283,7 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
 
   // タイマーがこのイベントでアクティブかどうか
   const isTimerActive = activeTimer?.eventId === eventId && (activeTimer?.isRunning || activeTimer?.isPrepared);
+  const isTimerRunning = activeTimer?.eventId === eventId && activeTimer?.isRunning;
 
   useEffect(() => {
     fetchEventById(eventId);
@@ -2296,12 +2297,24 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         headerRight: () =>
           currentEvent.organizer_id === user?.id ? (
             <View style={styles.headerButtons}>
-              <TouchableOpacity
-                onPress={() => setShowTimerModal(true)}
-                style={[styles.headerButton, isTimerActive && styles.headerButtonActive]}
-              >
-                <Clock size={20} color={isTimerActive ? colors.primary : colors.gray[600]} />
-              </TouchableOpacity>
+              {isTimerRunning ? (
+                <TouchableOpacity
+                  onPress={() => setShowTimerModal(true)}
+                  style={styles.headerTimerButton}
+                >
+                  <Clock size={16} color={colors.white} />
+                  <Text style={styles.headerTimerText}>
+                    {formatTime(activeTimer?.remainingTime || 0)}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setShowTimerModal(true)}
+                  style={[styles.headerButton, isTimerActive && styles.headerButtonActive]}
+                >
+                  <Clock size={20} color={isTimerActive ? colors.primary : colors.gray[600]} />
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 onPress={() => setShowReminderModal(true)}
                 style={styles.headerButton}
@@ -2378,12 +2391,24 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           ) : (
             // Show timer and reminder button for participants
             <View style={styles.headerButtons}>
-              <TouchableOpacity
-                onPress={() => setShowTimerModal(true)}
-                style={[styles.headerButton, isTimerActive && styles.headerButtonActive]}
-              >
-                <Clock size={20} color={isTimerActive ? colors.primary : colors.gray[600]} />
-              </TouchableOpacity>
+              {isTimerRunning ? (
+                <TouchableOpacity
+                  onPress={() => setShowTimerModal(true)}
+                  style={styles.headerTimerButton}
+                >
+                  <Clock size={16} color={colors.white} />
+                  <Text style={styles.headerTimerText}>
+                    {formatTime(activeTimer?.remainingTime || 0)}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => setShowTimerModal(true)}
+                  style={[styles.headerButton, isTimerActive && styles.headerButtonActive]}
+                >
+                  <Clock size={20} color={isTimerActive ? colors.primary : colors.gray[600]} />
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 onPress={() => setShowReminderModal(true)}
                 style={styles.headerButton}
@@ -2394,7 +2419,7 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
           ),
       });
     }
-  }, [currentEvent, user, navigation, eventId, deleteEvent, isTimerActive]);
+  }, [currentEvent, user, navigation, eventId, deleteEvent, isTimerActive, isTimerRunning, activeTimer?.remainingTime]);
 
   if (!currentEvent) {
     return (
@@ -2466,24 +2491,32 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         onError={(message) => showToast(message, 'error')}
       />
 
-      {/* Timer Modal */}
+      {/* Timer Modal - Bottom Sheet Style */}
       <Modal
         visible={showTimerModal}
         animationType="slide"
-        presentationStyle="pageSheet"
+        transparent={true}
         onRequestClose={() => setShowTimerModal(false)}
       >
-        <View style={styles.timerModalContainer}>
-          <View style={styles.timerModalHeader}>
-            <Text style={styles.timerModalTitle}>タイマー</Text>
-            <TouchableOpacity
-              onPress={() => setShowTimerModal(false)}
-              style={styles.timerModalCloseButton}
-            >
-              <X size={24} color={colors.gray[600]} />
-            </TouchableOpacity>
+        <View style={styles.timerModalOverlay}>
+          <TouchableOpacity
+            style={styles.timerModalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowTimerModal(false)}
+          />
+          <View style={styles.timerModalContainer}>
+            <View style={styles.timerModalHandle} />
+            <View style={styles.timerModalHeader}>
+              <Text style={styles.timerModalTitle}>タイマー</Text>
+              <TouchableOpacity
+                onPress={() => setShowTimerModal(false)}
+                style={styles.timerModalCloseButton}
+              >
+                <X size={22} color={colors.gray[500]} />
+              </TouchableOpacity>
+            </View>
+            <TimerTab eventId={eventId} onClose={() => setShowTimerModal(false)} />
           </View>
-          <TimerTab eventId={eventId} />
         </View>
       </Modal>
     </>
@@ -3760,23 +3793,59 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
 
-  // Timer Modal
-  timerModalContainer: {
+  // Header Timer Button
+  headerTimerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    gap: spacing.xs,
+    marginRight: spacing.xs,
+  },
+  headerTimerText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: colors.white,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Timer Modal - Bottom Sheet Style
+  timerModalOverlay: {
     flex: 1,
-    backgroundColor: colors.background,
+    justifyContent: 'flex-end',
+  },
+  timerModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  timerModalContainer: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: borderRadius['2xl'],
+    borderTopRightRadius: borderRadius['2xl'],
+    maxHeight: '70%',
+  },
+  timerModalHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: colors.gray[300],
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   timerModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.white,
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.gray[100],
   },
   timerModalTitle: {
-    fontSize: typography.fontSize.lg,
+    fontSize: typography.fontSize.base,
     fontWeight: '600',
     color: colors.gray[900],
   },
