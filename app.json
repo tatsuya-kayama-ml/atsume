@@ -56,7 +56,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.ico",
+      "favicon": "./assets/favicon.png",
       "bundler": "metro",
       "name": "ATSUME",
       "shortName": "ATSUME",
