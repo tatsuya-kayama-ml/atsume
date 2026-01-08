@@ -1014,6 +1014,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   // Payment link modal state
   const [showPaymentLinkModal, setShowPaymentLinkModal] = useState(false);
   const [paymentLinkInput, setPaymentLinkInput] = useState('');
+  const [paymentDetailsInput, setPaymentDetailsInput] = useState('');
   const [selectedPaymentType, setSelectedPaymentType] = useState<'paypay' | 'bank' | 'other'>('paypay');
   const [customLabelInput, setCustomLabelInput] = useState('');
   const [isSavingLink, setIsSavingLink] = useState(false);
@@ -1083,6 +1084,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   // Payment link handlers
   const handleOpenPaymentLinkModal = () => {
     setPaymentLinkInput(currentEvent?.payment_link || '');
+    setPaymentDetailsInput(currentEvent?.payment_details || '');
     const existingLabel = currentEvent?.payment_link_label || '';
 
     // Determine payment type from existing label
@@ -1115,13 +1117,23 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
     setIsSavingLink(true);
     try {
-      await updateEvent(eventId, {
-        payment_link: paymentLinkInput.trim() || null,
-        payment_link_label: finalLabel,
-      });
+      // PayPayの場合はURLリンクを保存、それ以外は詳細情報を保存
+      if (selectedPaymentType === 'paypay') {
+        await updateEvent(eventId, {
+          payment_link: paymentLinkInput.trim() || null,
+          payment_link_label: finalLabel,
+          payment_details: null, // PayPayの場合は詳細情報をクリア
+        });
+      } else {
+        await updateEvent(eventId, {
+          payment_link: null, // 銀行振込等の場合はURLをクリア
+          payment_link_label: finalLabel,
+          payment_details: paymentDetailsInput.trim() || null,
+        });
+      }
       await fetchEventById(eventId);
       setShowPaymentLinkModal(false);
-      showToast('支払いリンクを保存しました', 'success');
+      showToast('支払い情報を保存しました', 'success');
     } catch (error: any) {
       showToast(error.message || '保存に失敗しました', 'error');
     } finally {
@@ -1131,8 +1143,8 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
   const handleRemovePaymentLink = async () => {
     Alert.alert(
-      '支払いリンクを削除',
-      '支払いリンクを削除しますか？',
+      '支払い情報を削除',
+      '支払い情報を削除しますか？',
       [
         { text: 'キャンセル', style: 'cancel' },
         {
@@ -1144,10 +1156,11 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               await updateEvent(eventId, {
                 payment_link: null,
                 payment_link_label: null,
+                payment_details: null,
               });
               await fetchEventById(eventId);
               setShowPaymentLinkModal(false);
-              showToast('支払いリンクを削除しました', 'success');
+              showToast('支払い情報を削除しました', 'success');
             } catch (error: any) {
               showToast(error.message || '削除に失敗しました', 'error');
             } finally {
@@ -1193,7 +1206,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
           <View style={styles.paymentLinkHeader}>
             <View style={styles.paymentLinkTitleRow}>
               <CreditCard size={18} color={colors.primary} />
-              <Text style={styles.paymentLinkTitle}>支払いリンク</Text>
+              <Text style={styles.paymentLinkTitle}>支払い情報</Text>
             </View>
             <TouchableOpacity
               style={styles.paymentLinkEditButton}
@@ -1202,12 +1215,13 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             >
               <Edit size={16} color={colors.primary} />
               <Text style={styles.paymentLinkEditText}>
-                {currentEvent?.payment_link ? '編集' : '設定'}
+                {(currentEvent?.payment_link || currentEvent?.payment_details) ? '編集' : '設定'}
               </Text>
             </TouchableOpacity>
           </View>
 
           {currentEvent?.payment_link ? (
+            // PayPay等のURLリンクがある場合
             <View style={styles.paymentLinkDisplay}>
               <View style={styles.paymentLinkInfo}>
                 <Text style={styles.paymentLinkLabel}>
@@ -1225,10 +1239,22 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                 <ExternalLink size={16} color={colors.white} />
               </TouchableOpacity>
             </View>
+          ) : currentEvent?.payment_details ? (
+            // 銀行振込等の詳細情報がある場合
+            <View style={styles.paymentLinkDisplay}>
+              <View style={styles.paymentLinkInfo}>
+                <Text style={styles.paymentLinkLabel}>
+                  {currentEvent.payment_link_label || '支払い情報'}
+                </Text>
+                <Text style={styles.paymentDetailsText}>
+                  {currentEvent.payment_details}
+                </Text>
+              </View>
+            </View>
           ) : (
             <View style={styles.paymentLinkEmpty}>
               <Text style={styles.paymentLinkEmptyText}>
-                PayPayや銀行振込のリンクを設定すると、参加者に表示されます
+                PayPayや銀行口座情報を設定すると、参加者に表示されます
               </Text>
             </View>
           )}
@@ -1260,6 +1286,27 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             </View>
             <ExternalLink size={20} color={colors.primary} />
           </TouchableOpacity>
+        </Card>
+      )}
+
+      {/* Payment Details Card (Participant - View for non-PayPay) */}
+      {!isOrganizer && !currentEvent?.payment_link && currentEvent?.payment_details && (
+        <Card variant="elevated" style={styles.paymentLinkCard}>
+          <View style={styles.paymentLinkHeader}>
+            <View style={styles.paymentLinkTitleRow}>
+              <CreditCard size={18} color={colors.primary} />
+              <Text style={styles.paymentLinkTitle}>支払い方法</Text>
+            </View>
+          </View>
+
+          <View style={styles.paymentDetailsContainer}>
+            <Text style={styles.paymentDetailsLabel}>
+              {currentEvent.payment_link_label || '支払い情報'}
+            </Text>
+            <Text style={styles.paymentDetailsContent} selectable>
+              {currentEvent.payment_details}
+            </Text>
+          </View>
         </Card>
       )}
 
@@ -1366,7 +1413,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>支払いリンクを設定</Text>
+              <Text style={styles.modalTitle}>支払い情報を設定</Text>
               <TouchableOpacity
                 onPress={() => setShowPaymentLinkModal(false)}
                 style={styles.modalCloseButton}
@@ -1415,28 +1462,53 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                 </View>
               )}
 
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>URL</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={paymentLinkInput}
-                  onChangeText={setPaymentLinkInput}
-                  placeholder="https://..."
-                  placeholderTextColor={colors.gray[400]}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="url"
-                />
-              </View>
+              {selectedPaymentType === 'paypay' ? (
+                // PayPayの場合はURL入力
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>送金リンクURL</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={paymentLinkInput}
+                    onChangeText={setPaymentLinkInput}
+                    placeholder="https://pay.paypay.ne.jp/..."
+                    placeholderTextColor={colors.gray[400]}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                  />
+                </View>
+              ) : (
+                // 銀行振込・その他の場合は詳細テキスト入力
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>
+                    {selectedPaymentType === 'bank' ? '振込先口座情報' : '支払い詳細'}
+                  </Text>
+                  <TextInput
+                    style={[styles.textInput, styles.textInputMultiline]}
+                    value={paymentDetailsInput}
+                    onChangeText={setPaymentDetailsInput}
+                    placeholder={selectedPaymentType === 'bank'
+                      ? "例:\n銀行名: ○○銀行\n支店名: △△支店\n口座種別: 普通\n口座番号: 1234567\n口座名義: ヤマダ タロウ"
+                      : "支払い方法の詳細を入力してください"
+                    }
+                    placeholderTextColor={colors.gray[400]}
+                    multiline
+                    numberOfLines={6}
+                    textAlignVertical="top"
+                  />
+                </View>
+              )}
 
               <Text style={styles.modalHint}>
-                PayPayの送金リンクや、銀行振込先のURLなどを設定できます。
-                参加者の「集金」タブに表示されます。
+                {selectedPaymentType === 'paypay'
+                  ? 'PayPayの送金リンクを設定すると、参加者がタップして送金ページを開けます。'
+                  : '入力した情報は参加者の「集金」タブに表示されます。口座情報などをコピーできます。'
+                }
               </Text>
             </View>
 
             <View style={styles.modalFooter}>
-              {currentEvent?.payment_link && (
+              {(currentEvent?.payment_link || currentEvent?.payment_details) && (
                 <TouchableOpacity
                   style={styles.modalDeleteButton}
                   onPress={handleRemovePaymentLink}
@@ -1979,29 +2051,6 @@ const statsStyles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
     color: colors.gray[900],
-  },
-  paymentOverview: {
-    flexDirection: 'row',
-    marginBottom: spacing.md,
-  },
-  paymentItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  paymentLabel: {
-    fontSize: typography.fontSize.xs,
-    color: colors.gray[500],
-    marginBottom: spacing.xs,
-  },
-  paymentValue: {
-    fontSize: typography.fontSize.xl,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  paymentDivider: {
-    width: 1,
-    backgroundColor: colors.gray[200],
-    marginHorizontal: spacing.md,
   },
   collectionProgress: {
     marginBottom: spacing.md,
@@ -3558,6 +3607,31 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     fontSize: typography.fontSize.base,
     color: colors.gray[900],
+  },
+  textInputMultiline: {
+    minHeight: 120,
+    paddingTop: spacing.md,
+  },
+  paymentDetailsText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[700],
+    lineHeight: 20,
+  },
+  paymentDetailsContainer: {
+    backgroundColor: colors.gray[50],
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+  },
+  paymentDetailsLabel: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[900],
+    marginBottom: spacing.sm,
+  },
+  paymentDetailsContent: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[700],
+    lineHeight: 22,
   },
   modalHint: {
     fontSize: typography.fontSize.sm,
