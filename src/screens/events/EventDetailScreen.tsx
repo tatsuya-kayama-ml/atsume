@@ -1014,7 +1014,6 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   // Payment link modal state
   const [showPaymentLinkModal, setShowPaymentLinkModal] = useState(false);
   const [paymentLinkInput, setPaymentLinkInput] = useState('');
-  const [paymentLinkLabelInput, setPaymentLinkLabelInput] = useState('');
   const [selectedPaymentType, setSelectedPaymentType] = useState<'paypay' | 'bank' | 'other'>('paypay');
   const [customLabelInput, setCustomLabelInput] = useState('');
   const [isSavingLink, setIsSavingLink] = useState(false);
@@ -1084,16 +1083,41 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   // Payment link handlers
   const handleOpenPaymentLinkModal = () => {
     setPaymentLinkInput(currentEvent?.payment_link || '');
-    setPaymentLinkLabelInput(currentEvent?.payment_link_label || '');
+    const existingLabel = currentEvent?.payment_link_label || '';
+
+    // Determine payment type from existing label
+    if (existingLabel === 'PayPay') {
+      setSelectedPaymentType('paypay');
+      setCustomLabelInput('');
+    } else if (existingLabel === '銀行振込') {
+      setSelectedPaymentType('bank');
+      setCustomLabelInput('');
+    } else if (existingLabel) {
+      setSelectedPaymentType('other');
+      setCustomLabelInput(existingLabel);
+    } else {
+      setSelectedPaymentType('paypay');
+      setCustomLabelInput('');
+    }
     setShowPaymentLinkModal(true);
   };
 
   const handleSavePaymentLink = async () => {
+    // Determine label based on selected type
+    let finalLabel: string | null = null;
+    if (selectedPaymentType === 'paypay') {
+      finalLabel = 'PayPay';
+    } else if (selectedPaymentType === 'bank') {
+      finalLabel = '銀行振込';
+    } else if (selectedPaymentType === 'other') {
+      finalLabel = customLabelInput.trim() || null;
+    }
+
     setIsSavingLink(true);
     try {
       await updateEvent(eventId, {
         payment_link: paymentLinkInput.trim() || null,
-        payment_link_label: paymentLinkLabelInput.trim() || null,
+        payment_link_label: finalLabel,
       });
       await fetchEventById(eventId);
       setShowPaymentLinkModal(false);
@@ -1353,15 +1377,43 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
             <View style={styles.modalBody}>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>ラベル（任意）</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={paymentLinkLabelInput}
-                  onChangeText={setPaymentLinkLabelInput}
-                  placeholder="例: PayPay、銀行振込"
-                  placeholderTextColor={colors.gray[400]}
-                />
+                <Text style={styles.inputLabel}>支払い方法</Text>
+                <View style={styles.paymentTypeOptions}>
+                  {PAYMENT_TYPE_OPTIONS.map((option) => (
+                    <TouchableOpacity
+                      key={option.key}
+                      style={[
+                        styles.paymentTypeOption,
+                        selectedPaymentType === option.key && styles.paymentTypeOptionActive,
+                      ]}
+                      onPress={() => setSelectedPaymentType(option.key)}
+                    >
+                      <Text style={styles.paymentTypeIcon}>{option.icon}</Text>
+                      <Text
+                        style={[
+                          styles.paymentTypeLabel,
+                          selectedPaymentType === option.key && styles.paymentTypeLabelActive,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
+
+              {selectedPaymentType === 'other' && (
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>ラベル名</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={customLabelInput}
+                    onChangeText={setCustomLabelInput}
+                    placeholder="例: Kyash、楽天Pay"
+                    placeholderTextColor={colors.gray[400]}
+                  />
+                </View>
+              )}
 
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>URL</Text>
@@ -3555,5 +3607,39 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     fontWeight: '600',
     color: colors.white,
+  },
+  // Payment type selector styles
+  paymentTypeOptions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  paymentTypeOption: {
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.lg,
+    borderWidth: 2,
+    borderColor: colors.gray[200],
+    backgroundColor: colors.white,
+  },
+  paymentTypeOptionActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  paymentTypeIcon: {
+    fontSize: 24,
+    marginBottom: spacing.xs,
+  },
+  paymentTypeLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[600],
+    textAlign: 'center',
+  },
+  paymentTypeLabelActive: {
+    color: colors.primary,
   },
 });
