@@ -585,7 +585,18 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
       if (error) throw error;
 
-      set({ matches: data || [] });
+      // Supabaseの結合結果が配列で返される場合があるため、正規化する
+      const normalizedMatches = (data || []).map((match) => {
+        const team1Raw = match.team1 as unknown;
+        const team2Raw = match.team2 as unknown;
+        return {
+          ...match,
+          team1: Array.isArray(team1Raw) ? team1Raw[0] : team1Raw,
+          team2: Array.isArray(team2Raw) ? team2Raw[0] : team2Raw,
+        };
+      });
+
+      set({ matches: normalizedMatches });
     } catch (error: any) {
       set({ error: error.message });
       throw error;
