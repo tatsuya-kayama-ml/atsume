@@ -34,6 +34,9 @@ interface OnboardingState {
   // ウォークスルー完了フラグ
   hasCompletedWalkthrough: boolean;
 
+  // 新規ユーザーフラグ（サインアップ時にtrueになる）
+  isNewUser: boolean;
+
   // 表示済みツールチップのリスト（Setはシリアライズできないため配列で保持）
   shownTooltips: TooltipId[];
 
@@ -45,6 +48,7 @@ interface OnboardingState {
   markTooltipAsShown: (id: TooltipId) => void;
   setActiveTooltip: (id: TooltipId | null) => void;
   shouldShowTooltip: (id: TooltipId) => boolean;
+  setIsNewUser: (isNew: boolean) => void;
   resetOnboarding: () => void;
 }
 
@@ -52,11 +56,12 @@ export const useOnboardingStore = create<OnboardingState>()(
   persist(
     (set, get) => ({
       hasCompletedWalkthrough: false,
+      isNewUser: false,
       shownTooltips: [],
       activeTooltip: null,
 
       completeWalkthrough: () =>
-        set({ hasCompletedWalkthrough: true }),
+        set({ hasCompletedWalkthrough: true, isNewUser: false }),
 
       markTooltipAsShown: (id) =>
         set((state) => ({
@@ -74,9 +79,13 @@ export const useOnboardingStore = create<OnboardingState>()(
         return state.hasCompletedWalkthrough && !state.shownTooltips.includes(id);
       },
 
+      setIsNewUser: (isNew) =>
+        set({ isNewUser: isNew }),
+
       resetOnboarding: () =>
         set({
           hasCompletedWalkthrough: false,
+          isNewUser: true,
           shownTooltips: [],
           activeTooltip: null,
         }),
@@ -88,6 +97,7 @@ export const useOnboardingStore = create<OnboardingState>()(
       ),
       partialize: (state) => ({
         hasCompletedWalkthrough: state.hasCompletedWalkthrough,
+        isNewUser: state.isNewUser,
         shownTooltips: state.shownTooltips,
       }),
     }

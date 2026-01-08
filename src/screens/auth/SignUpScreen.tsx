@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, Input } from '../../components/common';
 import { useAuthStore } from '../../stores/authStore';
+import { useOnboardingStore } from '../../stores/onboardingStore';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography } from '../../constants/theme';
 import { AuthStackParamList } from '../../types';
@@ -48,6 +49,7 @@ interface Props {
 
 export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const { signUp, isLoading } = useAuthStore();
+  const { setIsNewUser } = useOnboardingStore();
   const { showToast } = useToast();
 
   const {
@@ -67,6 +69,8 @@ export const SignUpScreen: React.FC<Props> = ({ navigation }) => {
   const onSubmit = async (data: SignUpFormData) => {
     try {
       await signUp(data.email, data.password, data.displayName);
+      // 新規ユーザーフラグを設定（メール確認後のログイン時にオンボーディング表示）
+      setIsNewUser(true);
       showToast(
         '確認メールを送信しました。リンクをクリックして登録を完了してください。',
         'success',

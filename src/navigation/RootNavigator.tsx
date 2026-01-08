@@ -57,6 +57,7 @@ const linking = {
 export const RootNavigator: React.FC = () => {
   const { user, isLoading, isInitialized, isPasswordRecovery, initialize } = useAuthStore();
   const hasCompletedWalkthrough = useOnboardingStore((s) => s.hasCompletedWalkthrough);
+  const isNewUser = useOnboardingStore((s) => s.isNewUser);
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export const RootNavigator: React.FC = () => {
             }}
           />
         ) : user ? (
-          !hasCompletedWalkthrough ? (
+          isNewUser && !hasCompletedWalkthrough ? (
             <Stack.Screen
               name="Onboarding"
               component={OnboardingScreen}
