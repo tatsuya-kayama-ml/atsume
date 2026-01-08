@@ -56,8 +56,12 @@
       ]
     },
     "web": {
-      "favicon": "./assets/icon.png",
-      "bundler": "metro"
+      "favicon": "./assets/favicon.ico",
+      "bundler": "metro",
+      "name": "ATSUME",
+      "shortName": "ATSUME",
+      "themeColor": "#3B82F6",
+      "backgroundColor": "#ffffff"
     },
     "extra": {
       "eas": {
