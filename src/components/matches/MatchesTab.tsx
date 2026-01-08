@@ -13,15 +13,11 @@ import {
   Trophy,
   Users,
   Target,
-  ChevronDown,
-  ChevronUp,
   Play,
   Award,
-  Calendar,
   MapPin,
   Edit2,
   Trash2,
-  Plus,
 } from 'lucide-react-native';
 import { useMatchStore } from '../../stores/matchStore';
 import { useTeamStore } from '../../stores/teamStore';
@@ -51,21 +47,18 @@ const FORMAT_OPTIONS: { value: TournamentFormat; label: string; description: str
 export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
   const {
     tournament,
-    tournaments,
     matches,
     standings,
     isLoading,
     fetchTournament,
     createTournament,
     deleteTournament,
-    selectTournament,
     generateRoundRobinMatches,
     generateSingleEliminationMatches,
     generateDoubleEliminationMatches,
     generateSwissMatches,
     generateIndividualTeams,
     updateMatchScore,
-    updateMatchCourt,
   } = useMatchStore();
 
   const { teams, fetchTeams } = useTeamStore();
@@ -83,7 +76,6 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [editScores, setEditScores] = useState<{ team1: string; team2: string }>({ team1: '', team2: '' });
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
-  const [showTournamentSelector, setShowTournamentSelector] = useState(false);
 
   const isOrganizer = currentEvent?.organizer_id === user?.id;
 
@@ -94,7 +86,7 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
     }, [eventId])
   );
 
-  const handleCreateTournament = async (replaceExisting: boolean = false) => {
+  const handleCreateTournament = async () => {
     // 個人戦の場合は参加者チェック、団体戦の場合はチームチェック
     if (competitionType === 'individual') {
       if (selectedParticipants.length < 2) {
@@ -108,19 +100,14 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
       }
     }
 
-    const confirmMessage = replaceExisting && tournament
-      ? '既存の対戦表をリセットして新しく作成しますか?'
-      : '新しい対戦表を作成しますか?（既存の対戦表は残ります）';
+    const confirmMessage = tournament
+      ? '既存の対戦表をリセットして新しく作成しますか?（既存の対戦表は削除されます）'
+      : '新しい対戦表を作成しますか?';
 
     const confirmed = await confirmAlert('対戦表作成', confirmMessage, '作成');
     if (!confirmed) return;
 
     try {
-      // replaceExistingがtrueの場合のみ既存のトーナメントを削除
-      if (replaceExisting && tournament) {
-        await deleteTournament(tournament.id);
-      }
-
       // 個人戦の場合は参加者を1人チームとして作成
       let teamIds: string[];
       if (competitionType === 'individual') {
@@ -163,13 +150,6 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
       showAlert('完了', '対戦表を作成しました');
     } catch (error: any) {
       showAlert('エラー', error.message || '対戦表の作成に失敗しました');
-    }
-  };
-
-  const handleSelectTournament = async (t: typeof tournament) => {
-    if (t) {
-      await selectTournament(t);
-      setShowTournamentSelector(false);
     }
   };
 
@@ -424,7 +404,7 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
 
                 <Button
                   title="対戦表を作成"
-                  onPress={handleCreateTournament}
+                  onPress={() => handleCreateTournament()}
                   icon={<Play size={18} color={colors.white} />}
                   loading={isLoading}
                   fullWidth
@@ -497,37 +477,6 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
         />
       )}
 
-      {/* Tournament Selector (if multiple tournaments exist) */}
-      {tournaments.length > 1 && (
-        <Card variant="elevated" style={styles.tournamentSelectorCard}>
-          <Text style={styles.selectorLabel}>対戦表を選択:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tournamentTabs}>
-            {tournaments.map((t) => (
-              <TouchableOpacity
-                key={t.id}
-                style={[
-                  styles.tournamentTab,
-                  tournament?.id === t.id && styles.tournamentTabActive,
-                ]}
-                onPress={() => handleSelectTournament(t)}
-              >
-                <Text
-                  style={[
-                    styles.tournamentTabText,
-                    tournament?.id === t.id && styles.tournamentTabTextActive,
-                  ]}
-                >
-                  {FORMAT_OPTIONS.find((f) => f.value === t.format)?.label || t.format}
-                </Text>
-                <Text style={styles.tournamentTabDate}>
-                  {new Date(t.created_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </Card>
-      )}
-
       {/* Tournament Header */}
       <Card variant="elevated" style={styles.headerCard}>
         <View style={styles.headerRow}>
@@ -542,8 +491,8 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
                   onPress={() => setShowSettings(true)}
                   style={styles.addTournamentButton}
                 >
-                  <Plus size={16} color={colors.primary} />
-                  <Text style={styles.addTournamentText}>新規作成</Text>
+                  <Edit2 size={16} color={colors.primary} />
+                  <Text style={styles.addTournamentText}>リセット</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={handleDeleteTournament} style={styles.deleteButton}>
                   <Trash2 size={18} color={colors.error} />
@@ -574,7 +523,7 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
       {showSettings && (
         <Card variant="elevated" style={styles.settingsCard}>
           <View style={styles.settingsCardHeader}>
-            <Text style={styles.settingsCardTitle}>新しい対戦表を作成</Text>
+            <Text style={styles.settingsCardTitle}>対戦表をリセット</Text>
             <TouchableOpacity onPress={() => setShowSettings(false)}>
               <Text style={styles.closeButton}>×</Text>
             </TouchableOpacity>
@@ -690,8 +639,8 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
           </View>
 
           <Button
-            title="対戦表を作成"
-            onPress={() => handleCreateTournament(false)}
+            title="対戦表をリセット"
+            onPress={() => handleCreateTournament()}
             icon={<Play size={18} color={colors.white} />}
             loading={isLoading}
             fullWidth
@@ -1335,45 +1284,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
     color: colors.primary,
-  },
-  // Tournament Selector styles
-  tournamentSelectorCard: {
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  selectorLabel: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[700],
-    marginBottom: spacing.sm,
-  },
-  tournamentTabs: {
-    flexDirection: 'row',
-  },
-  tournamentTab: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.gray[100],
-    marginRight: spacing.sm,
-    minWidth: 100,
-    alignItems: 'center',
-  },
-  tournamentTabActive: {
-    backgroundColor: colors.primary,
-  },
-  tournamentTabText: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[700],
-  },
-  tournamentTabTextActive: {
-    color: colors.white,
-  },
-  tournamentTabDate: {
-    fontSize: typography.fontSize.xs,
-    color: colors.gray[500],
-    marginTop: 2,
   },
   // Header actions
   headerActions: {

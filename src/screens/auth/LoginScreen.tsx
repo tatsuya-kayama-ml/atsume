@@ -8,6 +8,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
+  Linking,
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { useForm, Controller } from 'react-hook-form';
@@ -170,6 +171,23 @@ export const LoginScreen: React.FC<Props> = ({ navigation }) => {
               アカウントを作成する
             </Text>
           </TouchableOpacity>
+
+          {/* Legal Links */}
+          <View style={styles.legalLinks}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('TermsOfService' as any)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.legalLinkText}>利用規約</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalSeparator}>・</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('PrivacyPolicy' as any)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.legalLinkText}>プライバシーポリシー</Text>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -289,5 +307,20 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     fontWeight: '600',
     color: colors.gray[700],
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.lg,
+  },
+  legalLinkText: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[500],
+  },
+  legalSeparator: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[400],
+    marginHorizontal: spacing.xs,
   },
 });

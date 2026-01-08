@@ -167,6 +167,20 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   createTournament: async (eventId, format, concurrentMatches, settings) => {
     set({ isLoading: true, error: null });
     try {
+      // Check if a tournament already exists for this event (due to unique constraint)
+      const { data: existingTournament } = await supabase
+        .from('tournaments')
+        .select('id')
+        .eq('event_id', eventId)
+        .single();
+
+      // If tournament exists, delete it first (with related matches and standings)
+      if (existingTournament) {
+        await supabase.from('matches').delete().eq('tournament_id', existingTournament.id);
+        await supabase.from('group_standings').delete().eq('tournament_id', existingTournament.id);
+        await supabase.from('tournaments').delete().eq('id', existingTournament.id);
+      }
+
       const { data, error } = await supabase
         .from('tournaments')
         .insert({
@@ -180,7 +194,7 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
       if (error) throw error;
 
-      set({ tournament: data, isLoading: false });
+      set({ tournament: data, tournaments: [data], isLoading: false });
       return data;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });

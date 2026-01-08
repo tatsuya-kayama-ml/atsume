@@ -1015,7 +1015,16 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const [showPaymentLinkModal, setShowPaymentLinkModal] = useState(false);
   const [paymentLinkInput, setPaymentLinkInput] = useState('');
   const [paymentLinkLabelInput, setPaymentLinkLabelInput] = useState('');
+  const [selectedPaymentType, setSelectedPaymentType] = useState<'paypay' | 'bank' | 'other'>('paypay');
+  const [customLabelInput, setCustomLabelInput] = useState('');
   const [isSavingLink, setIsSavingLink] = useState(false);
+
+  // Payment type options
+  const PAYMENT_TYPE_OPTIONS = [
+    { key: 'paypay' as const, label: 'PayPay', icon: '💰' },
+    { key: 'bank' as const, label: '銀行振込', icon: '🏦' },
+    { key: 'other' as const, label: 'その他', icon: '📝' },
+  ];
 
   useFocusEffect(
     useCallback(() => {
