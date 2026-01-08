@@ -821,8 +821,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   countButton: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     borderRadius: borderRadius.full,
     backgroundColor: colors.primary,
     alignItems: 'center',

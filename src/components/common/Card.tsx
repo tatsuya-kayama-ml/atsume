@@ -24,6 +24,8 @@ interface CardProps {
   disabled?: boolean;
   animated?: boolean;
   haptic?: boolean;
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -33,7 +35,9 @@ export const Card: React.FC<CardProps> = ({
   onPress,
   disabled = false,
   animated = true,
-  haptic = false,
+  haptic = true,
+  accessibilityLabel,
+  accessibilityHint,
 }) => {
   const scale = useSharedValue(1);
 
@@ -97,6 +101,11 @@ export const Card: React.FC<CardProps> = ({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         disabled={disabled}
+        accessible={true}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+        accessibilityState={{ disabled }}
       >
         {children}
       </AnimatedPressable>

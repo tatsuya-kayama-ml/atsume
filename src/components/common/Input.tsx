@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   TextInput,
@@ -8,7 +8,9 @@ import {
   TouchableOpacity,
   ViewStyle,
   Animated,
+  Platform,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { colors, borderRadius, typography, spacing } from '../../constants/theme';
 
 interface InputProps extends TextInputProps {
@@ -41,8 +43,17 @@ export const Input: React.FC<InputProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const animatedBorder = useRef(new Animated.Value(0)).current;
+  const prevError = useRef<string | undefined>(undefined);
 
   const showPasswordToggle = secureTextEntry && !rightIcon;
+
+  // Haptic feedback when error appears
+  useEffect(() => {
+    if (error && error !== prevError.current && Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+    prevError.current = error;
+  }, [error]);
 
   const handleFocus = (e: any) => {
     setIsFocused(true);
@@ -110,6 +121,12 @@ export const Input: React.FC<InputProps> = ({
           onBlur={handleBlur}
           secureTextEntry={secureTextEntry && !isPasswordVisible}
           selectionColor={colors.primary}
+          accessible={true}
+          accessibilityLabel={label}
+          accessibilityState={{
+            disabled: props.editable === false,
+          }}
+          accessibilityHint={error || hint}
           {...props}
         />
         {showPasswordToggle && (

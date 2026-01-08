@@ -293,6 +293,31 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       >
         新しいイベントを作成するか、{'\n'}招待コードでイベントに参加しましょう
       </Animated.Text>
+      <Animated.View
+        entering={FadeInDown.delay(500).springify()}
+        style={styles.emptyActions}
+      >
+        <TouchableOpacity
+          style={styles.emptyActionButton}
+          onPress={() => navigation.navigate('EventCreate')}
+          activeOpacity={0.7}
+          accessibilityLabel="イベントを作成する"
+          accessibilityHint="新しいイベント作成画面を開きます"
+        >
+          <Plus size={18} color={colors.white} style={{ marginRight: spacing.xs }} />
+          <Text style={styles.emptyActionButtonText}>イベントを作成</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.emptyActionButtonSecondary}
+          onPress={() => navigation.navigate('JoinEvent', {})}
+          activeOpacity={0.7}
+          accessibilityLabel="招待コードで参加する"
+          accessibilityHint="招待コード入力画面を開きます"
+        >
+          <Ticket size={18} color={colors.primary} style={{ marginRight: spacing.xs }} />
+          <Text style={styles.emptyActionButtonSecondaryText}>コードで参加</Text>
+        </TouchableOpacity>
+      </Animated.View>
     </View>
   );
 
@@ -640,7 +665,7 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: typography.fontSize.sm,
-    color: colors.gray[400],
+    color: colors.gray[500],
     marginBottom: spacing['2xs'],
     fontWeight: '500',
   },
@@ -842,7 +867,7 @@ const styles = StyleSheet.create({
   },
   metaTextCompact: {
     fontSize: typography.fontSize.xs,
-    color: colors.gray[500],
+    color: colors.gray[600],
     maxWidth: 120,
   },
   feeTextCompact: {
@@ -857,9 +882,9 @@ const styles = StyleSheet.create({
   timerButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     backgroundColor: colors.gray[50],
     marginRight: spacing.xs,
   },
@@ -897,6 +922,41 @@ const styles = StyleSheet.create({
     color: colors.gray[500],
     textAlign: 'center',
     lineHeight: typography.fontSize.sm * typography.lineHeight.relaxed,
+    marginBottom: spacing.lg,
+  },
+  emptyActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  emptyActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    minHeight: 44,
+  },
+  emptyActionButtonText: {
+    color: colors.white,
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+  },
+  emptyActionButtonSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    minHeight: 44,
+  },
+  emptyActionButtonSecondaryText: {
+    color: colors.primary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
   },
   fabContainer: {
     position: 'absolute',
