@@ -5,8 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
-  Platform,
   RefreshControl,
   TextInput,
 } from 'react-native';
@@ -32,6 +30,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { Card, Badge, Button } from '../common';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { TournamentFormat, CompetitionType } from '../../types';
+import { showAlert, confirmAlert } from '../../utils/alert';
 
 interface MatchesTabProps {
   eventId: string;
@@ -52,12 +51,14 @@ const FORMAT_OPTIONS: { value: TournamentFormat; label: string; description: str
 export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
   const {
     tournament,
+    tournaments,
     matches,
     standings,
     isLoading,
     fetchTournament,
     createTournament,
     deleteTournament,
+    selectTournament,
     generateRoundRobinMatches,
     generateSingleEliminationMatches,
     generateDoubleEliminationMatches,
@@ -82,6 +83,7 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [editScores, setEditScores] = useState<{ team1: string; team2: string }>({ team1: '', team2: '' });
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
+  const [showTournamentSelector, setShowTournamentSelector] = useState(false);
 
   const isOrganizer = currentEvent?.organizer_id === user?.id;
 
@@ -92,137 +94,96 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
     }, [eventId])
   );
 
-  const handleCreateTournament = async () => {
+  const handleCreateTournament = async (replaceExisting: boolean = false) => {
     // 個人戦の場合は参加者チェック、団体戦の場合はチームチェック
     if (competitionType === 'individual') {
       if (selectedParticipants.length < 2) {
-        const message = '参加者を2人以上選択してください';
-        if (Platform.OS === 'web') {
-          window.alert(message);
-        } else {
-          Alert.alert('エラー', message);
-        }
+        showAlert('エラー', '参加者を2人以上選択してください');
         return;
       }
     } else {
       if (teams.length < 2) {
-        const message = 'チームが2つ以上必要です';
-        if (Platform.OS === 'web') {
-          window.alert(message);
-        } else {
-          Alert.alert('エラー', message);
-        }
+        showAlert('エラー', 'チームが2つ以上必要です');
         return;
       }
     }
 
-    const confirmMessage = tournament
+    const confirmMessage = replaceExisting && tournament
       ? '既存の対戦表をリセットして新しく作成しますか?'
-      : '対戦表を作成しますか?';
+      : '新しい対戦表を作成しますか?（既存の対戦表は残ります）';
 
-    const proceed = async () => {
-      try {
-        // 既存のトーナメントを削除
-        if (tournament) {
-          await deleteTournament(tournament.id);
-        }
+    const confirmed = await confirmAlert('対戦表作成', confirmMessage, '作成');
+    if (!confirmed) return;
 
-        // 個人戦の場合は参加者を1人チームとして作成
-        let teamIds: string[];
-        if (competitionType === 'individual') {
-          const individualTeams = await generateIndividualTeams(eventId, selectedParticipants);
-          teamIds = individualTeams.map((t) => t.id);
-          await fetchTeams(eventId); // チーム一覧を再取得
-        } else {
-          teamIds = teams.map((t) => t.id);
-        }
+    try {
+      // replaceExistingがtrueの場合のみ既存のトーナメントを削除
+      if (replaceExisting && tournament) {
+        await deleteTournament(tournament.id);
+      }
 
-        // 新しいトーナメントを作成
-        const newTournament = await createTournament(eventId, selectedFormat, concurrentMatches, {
-          competition_type: competitionType,
-          enable_score_tracking: enableScoreTracking,
-          enable_standings: enableStandings,
-          has_third_place_match: selectedFormat === 'single_elimination' ? hasThirdPlaceMatch : false,
-          swiss_rounds: selectedFormat === 'swiss' ? swissRounds : undefined,
-          win_points: 3,
-          draw_points: 1,
-          loss_points: 0,
+      // 個人戦の場合は参加者を1人チームとして作成
+      let teamIds: string[];
+      if (competitionType === 'individual') {
+        const individualTeams = await generateIndividualTeams(eventId, selectedParticipants);
+        teamIds = individualTeams.map((t) => t.id);
+        await fetchTeams(eventId); // チーム一覧を再取得
+      } else {
+        teamIds = teams.map((t) => t.id);
+      }
+
+      // 新しいトーナメントを作成
+      const newTournament = await createTournament(eventId, selectedFormat, concurrentMatches, {
+        competition_type: competitionType,
+        enable_score_tracking: enableScoreTracking,
+        enable_standings: enableStandings,
+        has_third_place_match: selectedFormat === 'single_elimination' ? hasThirdPlaceMatch : false,
+        swiss_rounds: selectedFormat === 'swiss' ? swissRounds : undefined,
+        win_points: 3,
+        draw_points: 1,
+        loss_points: 0,
+      });
+
+      // マッチを生成
+      if (selectedFormat === 'round_robin') {
+        await generateRoundRobinMatches(newTournament.id, teamIds, concurrentMatches);
+      } else if (selectedFormat === 'single_elimination') {
+        await generateSingleEliminationMatches(newTournament.id, teamIds, {
+          has_third_place_match: hasThirdPlaceMatch,
         });
-
-        // マッチを生成
-        if (selectedFormat === 'round_robin') {
-          await generateRoundRobinMatches(newTournament.id, teamIds, concurrentMatches);
-        } else if (selectedFormat === 'single_elimination') {
-          await generateSingleEliminationMatches(newTournament.id, teamIds, {
-            has_third_place_match: hasThirdPlaceMatch,
-          });
-        } else if (selectedFormat === 'double_elimination') {
-          await generateDoubleEliminationMatches(newTournament.id, teamIds, {});
-        } else if (selectedFormat === 'swiss') {
-          await generateSwissMatches(newTournament.id, teamIds, swissRounds);
-        }
-
-        setShowSettings(false);
-
-        const successMessage = '対戦表を作成しました';
-        if (Platform.OS === 'web') {
-          window.alert(successMessage);
-        } else {
-          Alert.alert('完了', successMessage);
-        }
-      } catch (error: any) {
-        const errorMessage = error.message || '対戦表の作成に失敗しました';
-        if (Platform.OS === 'web') {
-          window.alert(errorMessage);
-        } else {
-          Alert.alert('エラー', errorMessage);
-        }
+      } else if (selectedFormat === 'double_elimination') {
+        await generateDoubleEliminationMatches(newTournament.id, teamIds, {});
+      } else if (selectedFormat === 'swiss') {
+        await generateSwissMatches(newTournament.id, teamIds, swissRounds);
       }
-    };
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(confirmMessage)) {
-        await proceed();
-      }
-    } else {
-      Alert.alert('対戦表作成', confirmMessage, [
-        { text: 'キャンセル', style: 'cancel' },
-        { text: '作成', onPress: proceed },
-      ]);
+      // 対戦表一覧を再取得
+      await fetchTournament(eventId);
+
+      setShowSettings(false);
+      showAlert('完了', '対戦表を作成しました');
+    } catch (error: any) {
+      showAlert('エラー', error.message || '対戦表の作成に失敗しました');
     }
   };
 
-  const handleDeleteTournament = () => {
+  const handleSelectTournament = async (t: typeof tournament) => {
+    if (t) {
+      await selectTournament(t);
+      setShowTournamentSelector(false);
+    }
+  };
+
+  const handleDeleteTournament = async () => {
     if (!tournament) return;
 
-    const proceed = async () => {
-      try {
-        await deleteTournament(tournament.id);
-        const successMessage = '対戦表を削除しました';
-        if (Platform.OS === 'web') {
-          window.alert(successMessage);
-        } else {
-          Alert.alert('完了', successMessage);
-        }
-      } catch (error: any) {
-        const errorMessage = error.message || '削除に失敗しました';
-        if (Platform.OS === 'web') {
-          window.alert(errorMessage);
-        } else {
-          Alert.alert('エラー', errorMessage);
-        }
-      }
-    };
+    const confirmed = await confirmAlert('対戦表削除', '対戦表を削除しますか?', '削除');
+    if (!confirmed) return;
 
-    if (Platform.OS === 'web') {
-      if (window.confirm('対戦表を削除しますか?')) {
-        proceed();
-      }
-    } else {
-      Alert.alert('対戦表削除', '対戦表を削除しますか?', [
-        { text: 'キャンセル', style: 'cancel' },
-        { text: '削除', style: 'destructive', onPress: proceed },
-      ]);
+    try {
+      await deleteTournament(tournament.id);
+      showAlert('完了', '対戦表を削除しました');
+    } catch (error: any) {
+      showAlert('エラー', error.message || '削除に失敗しました');
     }
   };
 
@@ -231,12 +192,7 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
     const team2Score = parseInt(editScores.team2, 10);
 
     if (isNaN(team1Score) || isNaN(team2Score)) {
-      const message = '有効なスコアを入力してください';
-      if (Platform.OS === 'web') {
-        window.alert(message);
-      } else {
-        Alert.alert('エラー', message);
-      }
+      showAlert('エラー', '有効なスコアを入力してください');
       return;
     }
 
@@ -245,12 +201,7 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
       setEditingMatchId(null);
       setEditScores({ team1: '', team2: '' });
     } catch (error: any) {
-      const errorMessage = error.message || 'スコアの更新に失敗しました';
-      if (Platform.OS === 'web') {
-        window.alert(errorMessage);
-      } else {
-        Alert.alert('エラー', errorMessage);
-      }
+      showAlert('エラー', error.message || 'スコアの更新に失敗しました');
     }
   };
 
@@ -528,6 +479,37 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
         />
       }
     >
+      {/* Tournament Selector (if multiple tournaments exist) */}
+      {tournaments.length > 1 && (
+        <Card variant="elevated" style={styles.tournamentSelectorCard}>
+          <Text style={styles.selectorLabel}>対戦表を選択:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tournamentTabs}>
+            {tournaments.map((t) => (
+              <TouchableOpacity
+                key={t.id}
+                style={[
+                  styles.tournamentTab,
+                  tournament?.id === t.id && styles.tournamentTabActive,
+                ]}
+                onPress={() => handleSelectTournament(t)}
+              >
+                <Text
+                  style={[
+                    styles.tournamentTabText,
+                    tournament?.id === t.id && styles.tournamentTabTextActive,
+                  ]}
+                >
+                  {FORMAT_OPTIONS.find((f) => f.value === t.format)?.label || t.format}
+                </Text>
+                <Text style={styles.tournamentTabDate}>
+                  {new Date(t.created_at).toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </Card>
+      )}
+
       {/* Tournament Header */}
       <Card variant="elevated" style={styles.headerCard}>
         <View style={styles.headerRow}>
@@ -535,11 +517,22 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
             <Trophy size={20} color={colors.primary} />
             <Text style={styles.headerTitle}>{formatLabel}</Text>
           </View>
-          {isOrganizer && (
-            <TouchableOpacity onPress={handleDeleteTournament} style={styles.deleteButton}>
-              <Trash2 size={18} color={colors.error} />
-            </TouchableOpacity>
-          )}
+          <View style={styles.headerActions}>
+            {isOrganizer && (
+              <>
+                <TouchableOpacity
+                  onPress={() => setShowSettings(true)}
+                  style={styles.addTournamentButton}
+                >
+                  <Plus size={16} color={colors.primary} />
+                  <Text style={styles.addTournamentText}>新規作成</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleDeleteTournament} style={styles.deleteButton}>
+                  <Trash2 size={18} color={colors.error} />
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
         <View style={styles.headerInfo}>
           <View style={styles.headerInfoItem}>
@@ -558,6 +551,135 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
           )}
         </View>
       </Card>
+
+      {/* New Tournament Settings Modal */}
+      {showSettings && (
+        <Card variant="elevated" style={styles.settingsCard}>
+          <View style={styles.settingsCardHeader}>
+            <Text style={styles.settingsCardTitle}>新しい対戦表を作成</Text>
+            <TouchableOpacity onPress={() => setShowSettings(false)}>
+              <Text style={styles.closeButton}>×</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 競技タイプ選択 */}
+          <View style={styles.settingsSection}>
+            <Text style={styles.settingsSectionTitle}>競技タイプ</Text>
+            <View style={styles.formatOptions}>
+              {COMPETITION_TYPE_OPTIONS.map((type) => (
+                <TouchableOpacity
+                  key={type.value}
+                  style={[
+                    styles.formatOption,
+                    competitionType === type.value && styles.formatOptionActive,
+                  ]}
+                  onPress={() => setCompetitionType(type.value)}
+                >
+                  <Text
+                    style={[
+                      styles.formatOptionTitle,
+                      competitionType === type.value && styles.formatOptionTitleActive,
+                    ]}
+                  >
+                    {type.label}
+                  </Text>
+                  <Text style={styles.formatOptionDescription}>{type.description}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* 個人戦の場合: 参加者選択 */}
+          {competitionType === 'individual' && (
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>参加者選択</Text>
+              <Text style={styles.settingsDescription}>
+                対戦に参加させる参加者を選択してください
+              </Text>
+              {participants
+                .filter((p) => p.attendance_status === 'attending' || p.actual_attendance === true)
+                .map((participant) => {
+                  const isSelected = selectedParticipants.includes(participant.id);
+                  const displayName =
+                    participant.display_name || participant.user?.display_name || '参加者';
+                  return (
+                    <TouchableOpacity
+                      key={participant.id}
+                      style={styles.checkboxRow}
+                      onPress={() => {
+                        if (isSelected) {
+                          setSelectedParticipants(selectedParticipants.filter((id) => id !== participant.id));
+                        } else {
+                          setSelectedParticipants([...selectedParticipants, participant.id]);
+                        }
+                      }}
+                    >
+                      <View style={[styles.checkbox, isSelected && styles.checkboxChecked]}>
+                        {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                      </View>
+                      <Text style={styles.checkboxLabel}>{displayName}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+            </View>
+          )}
+
+          {/* 対戦形式選択 */}
+          <View style={styles.settingsSection}>
+            <Text style={styles.settingsSectionTitle}>対戦形式</Text>
+            <View style={styles.formatOptions}>
+              {FORMAT_OPTIONS.map((format) => (
+                <TouchableOpacity
+                  key={format.value}
+                  style={[
+                    styles.formatOption,
+                    selectedFormat === format.value && styles.formatOptionActive,
+                  ]}
+                  onPress={() => setSelectedFormat(format.value)}
+                >
+                  <Text
+                    style={[
+                      styles.formatOptionTitle,
+                      selectedFormat === format.value && styles.formatOptionTitleActive,
+                    ]}
+                  >
+                    {format.label}
+                  </Text>
+                  <Text style={styles.formatOptionDescription}>{format.description}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* コート数設定 */}
+          <View style={styles.settingsSection}>
+            <Text style={styles.settingsSectionTitle}>同時進行試合数 (コート数)</Text>
+            <View style={styles.numberInputRow}>
+              <TouchableOpacity
+                style={styles.numberButton}
+                onPress={() => setConcurrentMatches(Math.max(1, concurrentMatches - 1))}
+              >
+                <Text style={styles.numberButtonText}>-</Text>
+              </TouchableOpacity>
+              <Text style={styles.numberValue}>{concurrentMatches}</Text>
+              <TouchableOpacity
+                style={styles.numberButton}
+                onPress={() => setConcurrentMatches(Math.min(10, concurrentMatches + 1))}
+              >
+                <Text style={styles.numberButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <Button
+            title="対戦表を作成"
+            onPress={() => handleCreateTournament(false)}
+            icon={<Play size={18} color={colors.white} />}
+            loading={isLoading}
+            fullWidth
+          />
+        </Card>
+      )}
 
       {/* Standings (if enabled) */}
       {tournament.settings?.enable_standings && standings.length > 0 && (
@@ -1195,5 +1317,87 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
     color: colors.primary,
+  },
+  // Tournament Selector styles
+  tournamentSelectorCard: {
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  selectorLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[700],
+    marginBottom: spacing.sm,
+  },
+  tournamentTabs: {
+    flexDirection: 'row',
+  },
+  tournamentTab: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.gray[100],
+    marginRight: spacing.sm,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  tournamentTabActive: {
+    backgroundColor: colors.primary,
+  },
+  tournamentTabText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[700],
+  },
+  tournamentTabTextActive: {
+    color: colors.white,
+  },
+  tournamentTabDate: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[500],
+    marginTop: 2,
+  },
+  // Header actions
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  addTournamentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.primarySoft,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  addTournamentText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  // Settings card for new tournament
+  settingsCard: {
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  settingsCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  settingsCardTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  closeButton: {
+    fontSize: typography.fontSize['2xl'],
+    color: colors.gray[500],
+    padding: spacing.xs,
   },
 });

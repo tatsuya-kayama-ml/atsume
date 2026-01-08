@@ -13,6 +13,7 @@ interface StandingWithTeam extends GroupStanding {
 
 interface MatchState {
   tournament: Tournament | null;
+  tournaments: Tournament[]; // 複数の対戦表をサポート
   matches: MatchWithTeams[];
   standings: StandingWithTeam[];
   isLoading: boolean;
@@ -26,6 +27,8 @@ interface MatchState {
     settings: TournamentSettings
   ) => Promise<Tournament>;
   fetchTournament: (eventId: string) => Promise<void>;
+  fetchAllTournaments: (eventId: string) => Promise<void>;
+  selectTournament: (tournament: Tournament | null) => Promise<void>;
   deleteTournament: (tournamentId: string) => Promise<void>;
 
   // Team generation for individual competition
@@ -155,6 +158,7 @@ const generateTournamentBracket = (teamIds: string[], hasThirdPlaceMatch: boolea
 
 export const useMatchStore = create<MatchState>((set, get) => ({
   tournament: null,
+  tournaments: [],
   matches: [],
   standings: [],
   isLoading: false,
@@ -187,28 +191,61 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   fetchTournament: async (eventId) => {
     set({ isLoading: true, error: null });
     try {
-      const { data, error } = await supabase
+      // 全ての対戦表を取得
+      const { data: allTournaments, error: allError } = await supabase
         .from('tournaments')
         .select('*')
         .eq('event_id', eventId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (allError) throw allError;
 
-      set({ tournament: data, isLoading: false });
+      // 最新の対戦表を選択
+      const latestTournament = allTournaments && allTournaments.length > 0 ? allTournaments[0] : null;
+
+      set({ tournaments: allTournaments || [], tournament: latestTournament, isLoading: false });
 
       // トーナメントがある場合は試合と順位表も取得
-      if (data) {
-        await get().fetchMatches(data.id);
-        if (data.settings?.enable_standings) {
-          await get().fetchStandings(data.id);
+      if (latestTournament) {
+        await get().fetchMatches(latestTournament.id);
+        if (latestTournament.settings?.enable_standings) {
+          await get().fetchStandings(latestTournament.id);
         }
+      } else {
+        set({ matches: [], standings: [] });
       }
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;
+    }
+  },
+
+  fetchAllTournaments: async (eventId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const { data, error } = await supabase
+        .from('tournaments')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      set({ tournaments: data || [], isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  selectTournament: async (tournament) => {
+    set({ tournament, matches: [], standings: [] });
+
+    if (tournament) {
+      await get().fetchMatches(tournament.id);
+      if (tournament.settings?.enable_standings) {
+        await get().fetchStandings(tournament.id);
+      }
     }
   },
 
@@ -229,7 +266,24 @@ export const useMatchStore = create<MatchState>((set, get) => ({
 
       if (error) throw error;
 
-      set({ tournament: null, matches: [], standings: [], isLoading: false });
+      // 現在選択中のトーナメントが削除された場合
+      const currentTournament = get().tournament;
+      const updatedTournaments = get().tournaments.filter((t) => t.id !== tournamentId);
+
+      if (currentTournament?.id === tournamentId) {
+        // 別の対戦表があれば最新のものを選択
+        const nextTournament = updatedTournaments.length > 0 ? updatedTournaments[0] : null;
+        set({ tournament: nextTournament, tournaments: updatedTournaments, matches: [], standings: [], isLoading: false });
+
+        if (nextTournament) {
+          await get().fetchMatches(nextTournament.id);
+          if (nextTournament.settings?.enable_standings) {
+            await get().fetchStandings(nextTournament.id);
+          }
+        }
+      } else {
+        set({ tournaments: updatedTournaments, isLoading: false });
+      }
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;
@@ -761,6 +815,6 @@ export const useMatchStore = create<MatchState>((set, get) => ({
   },
 
   clearMatches: () => {
-    set({ tournament: null, matches: [], standings: [], error: null });
+    set({ tournament: null, tournaments: [], matches: [], standings: [], error: null });
   },
 }));

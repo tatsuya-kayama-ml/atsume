@@ -24,7 +24,7 @@ interface TeamState {
   moveMemberToTeam: (memberId: string, newTeamId: string) => Promise<void>;
 
   // Auto assignment
-  autoAssignTeams: (eventId: string, mode: 'random' | 'balanced', teamCount: number) => Promise<void>;
+  autoAssignTeams: (eventId: string, mode: 'random' | 'balanced', teamCount: number, target?: 'attending' | 'checked_in') => Promise<void>;
 
   // Clear
   clearTeams: () => void;
@@ -314,25 +314,32 @@ export const useTeamStore = create<TeamState>((set, get) => ({
     }
   },
 
-  autoAssignTeams: async (eventId: string, mode: 'random' | 'balanced', teamCount: number) => {
+  autoAssignTeams: async (eventId: string, mode: 'random' | 'balanced', teamCount: number, target: 'attending' | 'checked_in' = 'attending') => {
     set({ isLoading: true, error: null });
     try {
       // First, delete existing teams
       await get().deleteAllTeams(eventId);
 
-      // Get attending participants
-      const { data: participants, error: participantsError } = await supabase
+      // Build query based on target
+      let query = supabase
         .from('event_participants')
         .select(`
           *,
           user:users(id, display_name, avatar_url, skill_level)
         `)
-        .eq('event_id', eventId)
-        .eq('attendance_status', 'attending');
+        .eq('event_id', eventId);
+
+      if (target === 'checked_in') {
+        query = query.eq('check_in_status', 'checked_in');
+      } else {
+        query = query.eq('attendance_status', 'attending');
+      }
+
+      const { data: participants, error: participantsError } = await query;
 
       if (participantsError) throw participantsError;
       if (!participants || participants.length === 0) {
-        throw new Error('参加者がいません');
+        throw new Error(target === 'checked_in' ? '来ている参加者がいません' : '参加予定者がいません');
       }
 
       // Create teams

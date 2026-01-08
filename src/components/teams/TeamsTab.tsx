@@ -5,27 +5,31 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
-  Platform,
   RefreshControl,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Users,
   Shuffle,
   Scale,
-  Plus,
   Trash2,
   ChevronDown,
   ChevronUp,
-  GripVertical,
   UserMinus,
+  Edit3,
+  ArrowRight,
+  X,
+  Check,
+  UserPlus,
 } from 'lucide-react-native';
 import { useTeamStore } from '../../stores/teamStore';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Card, Badge, Avatar, Button } from '../common';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
+import { showAlert, confirmAlert } from '../../utils/alert';
 
 interface TeamsTabProps {
   eventId: string;
@@ -34,8 +38,8 @@ interface TeamsTabProps {
 const TEAM_COUNT_OPTIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
-  const { teams, isLoading: teamLoading, fetchTeams, autoAssignTeams, deleteAllTeams, removeMemberFromTeam } = useTeamStore();
-  const { currentEvent, participants, fetchParticipants, isLoading: participantLoading } = useEventStore();
+  const { teams, isLoading: teamLoading, fetchTeams, autoAssignTeams, deleteAllTeams, removeMemberFromTeam, updateTeam, moveMemberToTeam, addMemberToTeam } = useTeamStore();
+  const { currentEvent, participants, fetchParticipants } = useEventStore();
   const { user } = useAuthStore();
 
   const [showSettings, setShowSettings] = useState(false);
@@ -43,8 +47,32 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // チーム分け対象の選択: 'attending' = 参加予定者, 'checked_in' = 来ている参加者
+  const [assignTarget, setAssignTarget] = useState<'attending' | 'checked_in'>('attending');
+
+  // チーム名編集用state
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editingTeamName, setEditingTeamName] = useState('');
+
+  // メンバー移動用state
+  const [movingMember, setMovingMember] = useState<{ memberId: string; memberName: string; currentTeamId: string } | null>(null);
+
+  // メンバー追加用state
+  const [addingToTeamId, setAddingToTeamId] = useState<string | null>(null);
+
   const isOrganizer = currentEvent?.organizer_id === user?.id;
   const attendingParticipants = participants.filter((p) => p.attendance_status === 'attending');
+  const checkedInParticipants = participants.filter((p) => p.check_in_status === 'checked_in');
+
+  // 既にチームに割り当てられているparticipant IDのセット
+  const assignedParticipantIds = new Set(
+    teams.flatMap((t) => t.members.map((m) => m.participant_id))
+  );
+
+  // 未割り当ての参加者
+  const unassignedParticipants = attendingParticipants.filter(
+    (p) => !assignedParticipantIds.has(p.id)
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -87,119 +115,109 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
   };
 
   const handleAutoAssign = async (mode: 'random' | 'balanced') => {
-    if (attendingParticipants.length === 0) {
-      const message = '参加予定の参加者がいません';
-      if (Platform.OS === 'web') {
-        window.alert(message);
-      } else {
-        Alert.alert('エラー', message);
-      }
+    const targetParticipants = assignTarget === 'checked_in' ? checkedInParticipants : attendingParticipants;
+    const targetLabel = assignTarget === 'checked_in' ? '来ている参加者' : '参加予定者';
+
+    if (targetParticipants.length === 0) {
+      showAlert('エラー', `${targetLabel}がいません`);
       return;
     }
 
-    if (selectedTeamCount > attendingParticipants.length) {
-      const message = `チーム数(${selectedTeamCount})が参加者数(${attendingParticipants.length})より多いです`;
-      if (Platform.OS === 'web') {
-        window.alert(message);
-      } else {
-        Alert.alert('エラー', message);
-      }
+    if (selectedTeamCount > targetParticipants.length) {
+      showAlert('エラー', `チーム数(${selectedTeamCount})が${targetLabel}数(${targetParticipants.length})より多いです`);
       return;
     }
 
     const confirmMessage = teams.length > 0
-      ? '既存のチーム分けをリセットして新しく分けますか？'
-      : `${selectedTeamCount}チームに分けますか？`;
+      ? `既存のチーム分けをリセットして、${targetLabel}(${targetParticipants.length}人)で新しく分けますか？`
+      : `${targetLabel}(${targetParticipants.length}人)を${selectedTeamCount}チームに分けますか？`;
 
-    const proceed = async () => {
-      try {
-        await autoAssignTeams(eventId, mode, selectedTeamCount);
-        setShowSettings(false);
-        // Expand all teams after assignment
-        const newExpandedTeams = new Set<string>();
-        teams.forEach((t) => newExpandedTeams.add(t.id));
-        setExpandedTeams(newExpandedTeams);
-      } catch (error: any) {
-        const errorMessage = error.message || 'チーム分けに失敗しました';
-        if (Platform.OS === 'web') {
-          window.alert(errorMessage);
-        } else {
-          Alert.alert('エラー', errorMessage);
-        }
-      }
-    };
+    const confirmed = await confirmAlert('チーム分け', confirmMessage, '実行');
+    if (!confirmed) return;
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(confirmMessage)) {
-        await proceed();
-      }
-    } else {
-      Alert.alert('チーム分け', confirmMessage, [
-        { text: 'キャンセル', style: 'cancel' },
-        { text: '実行', onPress: proceed },
-      ]);
+    try {
+      await autoAssignTeams(eventId, mode, selectedTeamCount, assignTarget);
+      setShowSettings(false);
+      // Expand all teams after assignment
+      const newExpandedTeams = new Set<string>();
+      teams.forEach((t) => newExpandedTeams.add(t.id));
+      setExpandedTeams(newExpandedTeams);
+    } catch (error: any) {
+      showAlert('エラー', error.message || 'チーム分けに失敗しました');
     }
   };
 
-  const handleDeleteAllTeams = () => {
-    const proceed = async () => {
-      try {
-        await deleteAllTeams(eventId);
-      } catch (error: any) {
-        const errorMessage = error.message || 'チームの削除に失敗しました';
-        if (Platform.OS === 'web') {
-          window.alert(errorMessage);
-        } else {
-          Alert.alert('エラー', errorMessage);
-        }
-      }
-    };
+  const handleDeleteAllTeams = async () => {
+    const confirmed = await confirmAlert('チーム削除', 'すべてのチームを削除しますか？', '削除');
+    if (!confirmed) return;
 
-    if (Platform.OS === 'web') {
-      if (window.confirm('すべてのチームを削除しますか？')) {
-        proceed();
-      }
-    } else {
-      Alert.alert('チーム削除', 'すべてのチームを削除しますか？', [
-        { text: 'キャンセル', style: 'cancel' },
-        { text: '削除', style: 'destructive', onPress: proceed },
-      ]);
+    try {
+      await deleteAllTeams(eventId);
+    } catch (error: any) {
+      showAlert('エラー', error.message || 'チームの削除に失敗しました');
     }
   };
 
-  const handleRemoveMember = (memberId: string, memberName: string) => {
-    const proceed = async () => {
-      try {
-        await removeMemberFromTeam(memberId);
-      } catch (error: any) {
-        const errorMessage = error.message || 'メンバーの削除に失敗しました';
-        if (Platform.OS === 'web') {
-          window.alert(errorMessage);
-        } else {
-          Alert.alert('エラー', errorMessage);
-        }
-      }
-    };
+  const handleRemoveMember = async (memberId: string, memberName: string) => {
+    const confirmed = await confirmAlert('メンバー削除', `${memberName}をチームから外しますか？`, '外す');
+    if (!confirmed) return;
 
-    if (Platform.OS === 'web') {
-      if (window.confirm(`${memberName}をチームから外しますか？`)) {
-        proceed();
-      }
-    } else {
-      Alert.alert('メンバー削除', `${memberName}をチームから外しますか？`, [
-        { text: 'キャンセル', style: 'cancel' },
-        { text: '外す', style: 'destructive', onPress: proceed },
-      ]);
+    try {
+      await removeMemberFromTeam(memberId);
+    } catch (error: any) {
+      showAlert('エラー', error.message || 'メンバーの削除に失敗しました');
     }
   };
 
-  const calculateTeamAverageSkill = (members: any[]): number => {
-    if (members.length === 0) return 0;
-    const total = members.reduce((sum, m) => {
-      const skill = m.participant?.skill_level ?? m.participant?.user?.skill_level ?? 3;
-      return sum + skill;
-    }, 0);
-    return total / members.length;
+  // チーム名編集
+  const handleStartEditTeamName = (teamId: string, currentName: string) => {
+    setEditingTeamId(teamId);
+    setEditingTeamName(currentName);
+  };
+
+  const handleSaveTeamName = async () => {
+    if (!editingTeamId || !editingTeamName.trim()) return;
+
+    try {
+      await updateTeam(editingTeamId, { name: editingTeamName.trim() });
+      setEditingTeamId(null);
+      setEditingTeamName('');
+    } catch (error: any) {
+      showAlert('エラー', error.message || 'チーム名の更新に失敗しました');
+    }
+  };
+
+  const handleCancelEditTeamName = () => {
+    setEditingTeamId(null);
+    setEditingTeamName('');
+  };
+
+  // メンバー移動
+  const handleStartMoveMember = (memberId: string, memberName: string, currentTeamId: string) => {
+    setMovingMember({ memberId, memberName, currentTeamId });
+  };
+
+  const handleMoveMember = async (newTeamId: string) => {
+    if (!movingMember) return;
+
+    try {
+      await moveMemberToTeam(movingMember.memberId, newTeamId);
+      setMovingMember(null);
+    } catch (error: any) {
+      showAlert('エラー', error.message || 'メンバーの移動に失敗しました');
+    }
+  };
+
+  // メンバー追加
+  const handleAddMemberToTeam = async (participantId: string) => {
+    if (!addingToTeamId) return;
+
+    try {
+      await addMemberToTeam(addingToTeamId, participantId);
+      setAddingToTeamId(null);
+    } catch (error: any) {
+      showAlert('エラー', error.message || 'メンバーの追加に失敗しました');
+    }
   };
 
   // Render empty state when no teams exist
@@ -252,6 +270,44 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
               </View>
             </View>
 
+            <View style={styles.targetSelector}>
+              <Text style={styles.teamCountLabel}>対象:</Text>
+              <View style={styles.targetOptions}>
+                <TouchableOpacity
+                  style={[
+                    styles.targetOption,
+                    assignTarget === 'attending' && styles.targetOptionSelected,
+                  ]}
+                  onPress={() => setAssignTarget('attending')}
+                >
+                  <Text
+                    style={[
+                      styles.targetOptionText,
+                      assignTarget === 'attending' && styles.targetOptionTextSelected,
+                    ]}
+                  >
+                    参加予定 ({attendingParticipants.length})
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.targetOption,
+                    assignTarget === 'checked_in' && styles.targetOptionSelected,
+                  ]}
+                  onPress={() => setAssignTarget('checked_in')}
+                >
+                  <Text
+                    style={[
+                      styles.targetOptionText,
+                      assignTarget === 'checked_in' && styles.targetOptionTextSelected,
+                    ]}
+                  >
+                    来ている人 ({checkedInParticipants.length})
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
             <View style={styles.assignButtons}>
               <Button
                 title="ランダム分け"
@@ -269,10 +325,6 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                 loading={teamLoading}
               />
             </View>
-
-            <Text style={styles.participantInfo}>
-              参加予定: {attendingParticipants.length}人
-            </Text>
           </Card>
         ) : (
           <Card variant="elevated" style={styles.emptyCard}>
@@ -344,6 +396,44 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                 </View>
               </View>
 
+              <View style={styles.targetSelector}>
+                <Text style={styles.teamCountLabel}>対象:</Text>
+                <View style={styles.targetOptions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.targetOption,
+                      assignTarget === 'attending' && styles.targetOptionSelected,
+                    ]}
+                    onPress={() => setAssignTarget('attending')}
+                  >
+                    <Text
+                      style={[
+                        styles.targetOptionText,
+                        assignTarget === 'attending' && styles.targetOptionTextSelected,
+                      ]}
+                    >
+                      参加予定 ({attendingParticipants.length})
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.targetOption,
+                      assignTarget === 'checked_in' && styles.targetOptionSelected,
+                    ]}
+                    onPress={() => setAssignTarget('checked_in')}
+                  >
+                    <Text
+                      style={[
+                        styles.targetOptionText,
+                        assignTarget === 'checked_in' && styles.targetOptionTextSelected,
+                      ]}
+                    >
+                      来ている人 ({checkedInParticipants.length})
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
               <View style={styles.assignButtons}>
                 <Button
                   title="ランダム"
@@ -397,34 +487,61 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
       {/* Teams List */}
       {teams.map((team) => {
         const isExpanded = expandedTeams.has(team.id);
-        const averageSkill = calculateTeamAverageSkill(team.members);
+        const isEditing = editingTeamId === team.id;
 
         return (
           <Card key={team.id} variant="elevated" style={styles.teamCard}>
-            <TouchableOpacity
-              style={styles.teamHeader}
-              onPress={() => toggleTeamExpanded(team.id)}
-            >
-              <View style={styles.teamHeaderLeft}>
+            <View style={styles.teamHeader}>
+              <TouchableOpacity
+                style={styles.teamHeaderLeft}
+                onPress={() => toggleTeamExpanded(team.id)}
+              >
                 <View style={[styles.teamColorIndicator, { backgroundColor: team.color }]} />
-                <Text style={styles.teamName}>{team.name}</Text>
-                <Badge
-                  label={`${team.members.length}人`}
-                  color="default"
-                  size="sm"
-                />
-              </View>
-              <View style={styles.teamHeaderRight}>
-                <Text style={styles.teamSkillAvg}>
-                  平均: {averageSkill.toFixed(1)}
-                </Text>
-                {isExpanded ? (
-                  <ChevronUp size={20} color={colors.gray[400]} />
+                {isEditing ? (
+                  <View style={styles.editNameContainer}>
+                    <TextInput
+                      style={styles.editNameInput}
+                      value={editingTeamName}
+                      onChangeText={setEditingTeamName}
+                      autoFocus
+                      selectTextOnFocus
+                    />
+                    <TouchableOpacity style={styles.editNameButton} onPress={handleSaveTeamName}>
+                      <Check size={18} color={colors.success} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.editNameButton} onPress={handleCancelEditTeamName}>
+                      <X size={18} color={colors.gray[400]} />
+                    </TouchableOpacity>
+                  </View>
                 ) : (
-                  <ChevronDown size={20} color={colors.gray[400]} />
+                  <>
+                    <Text style={styles.teamName}>{team.name}</Text>
+                    <Badge
+                      label={`${team.members.length}人`}
+                      color="default"
+                      size="sm"
+                    />
+                  </>
                 )}
+              </TouchableOpacity>
+              <View style={styles.teamHeaderRight}>
+                {isOrganizer && !isEditing && (
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => handleStartEditTeamName(team.id, team.name)}
+                  >
+                    <Edit3 size={16} color={colors.gray[400]} />
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => toggleTeamExpanded(team.id)}>
+                  {isExpanded ? (
+                    <ChevronUp size={20} color={colors.gray[400]} />
+                  ) : (
+                    <ChevronDown size={20} color={colors.gray[400]} />
+                  )}
+                </TouchableOpacity>
               </View>
-            </TouchableOpacity>
+            </View>
 
             {isExpanded && (
               <View style={styles.teamMembers}>
@@ -434,8 +551,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                   team.members.map((member) => {
                     const participant = member.participant;
                     const memberUser = participant?.user;
-                    const displayName = memberUser?.display_name || '名前未設定';
-                    const skillLevel = participant?.skill_level ?? memberUser?.skill_level ?? 3;
+                    const displayName = participant?.display_name || memberUser?.display_name || '名前未設定';
 
                     return (
                       <View key={member.id} style={styles.memberItem}>
@@ -446,29 +562,146 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                             size="sm"
                           />
                           <Text style={styles.memberName}>{displayName}</Text>
-                          <Badge
-                            label={`Lv.${skillLevel}`}
-                            color={skillLevel >= 4 ? 'warning' : skillLevel >= 2 ? 'primary' : 'default'}
-                            size="sm"
-                          />
                         </View>
                         {isOrganizer && (
-                          <TouchableOpacity
-                            style={styles.removeMemberButton}
-                            onPress={() => handleRemoveMember(member.id, displayName)}
-                          >
-                            <UserMinus size={16} color={colors.error} />
-                          </TouchableOpacity>
+                          <View style={styles.memberActions}>
+                            <TouchableOpacity
+                              style={styles.memberActionButton}
+                              onPress={() => handleStartMoveMember(member.id, displayName, team.id)}
+                            >
+                              <ArrowRight size={16} color={colors.primary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.memberActionButton}
+                              onPress={() => handleRemoveMember(member.id, displayName)}
+                            >
+                              <UserMinus size={16} color={colors.error} />
+                            </TouchableOpacity>
+                          </View>
                         )}
                       </View>
                     );
                   })
+                )}
+                {/* メンバー追加ボタン */}
+                {isOrganizer && unassignedParticipants.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.addMemberButton}
+                    onPress={() => setAddingToTeamId(team.id)}
+                  >
+                    <UserPlus size={16} color={colors.primary} />
+                    <Text style={styles.addMemberButtonText}>メンバーを追加</Text>
+                  </TouchableOpacity>
                 )}
               </View>
             )}
           </Card>
         );
       })}
+
+      {/* メンバー移動モーダル */}
+      <Modal
+        visible={movingMember !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMovingMember(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {movingMember?.memberName}を移動
+              </Text>
+              <TouchableOpacity onPress={() => setMovingMember(null)}>
+                <X size={24} color={colors.gray[500]} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSubtitle}>移動先のチームを選択</Text>
+            <View style={styles.teamSelectList}>
+              {teams
+                .filter((t) => t.id !== movingMember?.currentTeamId)
+                .map((team) => (
+                  <TouchableOpacity
+                    key={team.id}
+                    style={styles.teamSelectItem}
+                    onPress={() => handleMoveMember(team.id)}
+                  >
+                    <View style={[styles.teamSelectColor, { backgroundColor: team.color }]} />
+                    <Text style={styles.teamSelectName}>{team.name}</Text>
+                    <Text style={styles.teamSelectCount}>{team.members.length}人</Text>
+                  </TouchableOpacity>
+                ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* メンバー追加モーダル */}
+      <Modal
+        visible={addingToTeamId !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAddingToTeamId(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>メンバーを追加</Text>
+              <TouchableOpacity onPress={() => setAddingToTeamId(null)}>
+                <X size={24} color={colors.gray[500]} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSubtitle}>
+              {teams.find((t) => t.id === addingToTeamId)?.name}に追加するメンバーを選択
+            </Text>
+            <ScrollView style={styles.memberSelectList} showsVerticalScrollIndicator={false}>
+              {unassignedParticipants.length === 0 ? (
+                <Text style={styles.noUnassignedText}>未割り当てのメンバーがいません</Text>
+              ) : (
+                unassignedParticipants.map((participant) => {
+                  const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
+                  return (
+                    <TouchableOpacity
+                      key={participant.id}
+                      style={styles.memberSelectItem}
+                      onPress={() => handleAddMemberToTeam(participant.id)}
+                    >
+                      <Avatar
+                        name={displayName}
+                        imageUrl={participant.user?.avatar_url ?? undefined}
+                        size="sm"
+                      />
+                      <Text style={styles.memberSelectName}>{displayName}</Text>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 未割り当てメンバー */}
+      {isOrganizer && unassignedParticipants.length > 0 && (
+        <Card variant="elevated" style={styles.unassignedCard}>
+          <Text style={styles.unassignedTitle}>未割り当て ({unassignedParticipants.length}人)</Text>
+          <View style={styles.unassignedList}>
+            {unassignedParticipants.map((participant) => {
+              const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
+              return (
+                <View key={participant.id} style={styles.unassignedItem}>
+                  <Avatar
+                    name={displayName}
+                    imageUrl={participant.user?.avatar_url ?? undefined}
+                    size="sm"
+                  />
+                  <Text style={styles.unassignedName}>{displayName}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </Card>
+      )}
 
       <View style={{ height: spacing.xl }} />
     </ScrollView>
@@ -644,9 +877,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  teamSkillAvg: {
-    fontSize: typography.fontSize.xs,
-    color: colors.gray[500],
+  editButton: {
+    padding: spacing.xs,
+  },
+  editNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: spacing.xs,
+  },
+  editNameInput: {
+    flex: 1,
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[900],
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.white,
+  },
+  editNameButton: {
+    padding: spacing.xs,
   },
   teamMembers: {
     borderTopWidth: 1,
@@ -669,12 +922,173 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    flex: 1,
   },
   memberName: {
     fontSize: typography.fontSize.sm,
     color: colors.gray[700],
   },
-  removeMemberButton: {
+  memberActions: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  memberActionButton: {
     padding: spacing.xs,
+  },
+  // モーダルスタイル
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    width: '100%',
+    maxWidth: 400,
+    ...shadows.lg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  modalTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  modalSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    marginBottom: spacing.md,
+  },
+  teamSelectList: {
+    gap: spacing.sm,
+  },
+  teamSelectItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    backgroundColor: colors.gray[50],
+    borderRadius: borderRadius.md,
+    gap: spacing.sm,
+  },
+  teamSelectColor: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+  },
+  teamSelectName: {
+    flex: 1,
+    fontSize: typography.fontSize.base,
+    fontWeight: '500',
+    color: colors.gray[900],
+  },
+  teamSelectCount: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+  },
+  // 対象選択スタイル
+  targetSelector: {
+    width: '100%',
+    marginBottom: spacing.md,
+  },
+  targetOptions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  targetOption: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.gray[100],
+    alignItems: 'center',
+  },
+  targetOptionSelected: {
+    backgroundColor: colors.primary,
+  },
+  targetOptionText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '500',
+    color: colors.gray[600],
+  },
+  targetOptionTextSelected: {
+    color: colors.white,
+  },
+  // メンバー追加ボタン
+  addMemberButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: borderRadius.md,
+    borderStyle: 'dashed',
+  },
+  addMemberButtonText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  // メンバー選択リスト
+  memberSelectList: {
+    maxHeight: 300,
+  },
+  memberSelectItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    backgroundColor: colors.gray[50],
+    borderRadius: borderRadius.md,
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  memberSelectName: {
+    fontSize: typography.fontSize.base,
+    color: colors.gray[900],
+  },
+  noUnassignedText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[400],
+    textAlign: 'center',
+    padding: spacing.md,
+  },
+  // 未割り当てカード
+  unassignedCard: {
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  unassignedTitle: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[700],
+    marginBottom: spacing.sm,
+  },
+  unassignedList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  unassignedItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.gray[100],
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.md,
+  },
+  unassignedName: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[700],
   },
 });

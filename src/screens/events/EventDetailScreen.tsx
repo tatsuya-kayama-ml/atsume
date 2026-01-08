@@ -33,19 +33,16 @@ import {
   Trash2,
   Loader,
   AlertTriangle,
-  Clock,
   Copy,
   Bell,
   BarChart3,
   TrendingUp,
   PieChart,
-  UserCheck,
-  UserX,
-  CircleDollarSign,
   UserPlus,
 } from 'lucide-react-native';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useMatchStore } from '../../stores/matchStore';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Card, Badge, Avatar } from '../../components/common';
 import { ReminderModal, AddParticipantModal } from '../../components/events';
@@ -53,7 +50,7 @@ import { TeamsTab } from '../../components/teams';
 import { MatchesTab } from '../../components/matches';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { RootStackParamList, EventTabParamList, AttendanceStatus, PaymentStatus, GenderType } from '../../types';
-import { logger } from '../../utils';
+import { logger, formatDateTime } from '../../utils';
 
 const { width } = Dimensions.get('window');
 const Tab = createMaterialTopTabNavigator<EventTabParamList>();
@@ -62,23 +59,6 @@ interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList, 'EventDetail'>;
   route: RouteProp<RootStackParamList, 'EventDetail'>;
 }
-
-const formatDateTime = (dateString: string): { date: string; time: string; shortDate: string } => {
-  const date = new Date(dateString);
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
-  const weekday = weekdays[date.getDay()];
-  const hours = date.getHours().toString().padStart(2, '0');
-  const minutes = date.getMinutes().toString().padStart(2, '0');
-
-  return {
-    date: `${year}年${month}月${day}日(${weekday})`,
-    time: `${hours}:${minutes}`,
-    shortDate: `${month}/${day}(${weekday})`,
-  };
-};
 
 // Status options for the event (simplified to 2 options)
 const STATUS_OPTIONS = [
@@ -102,7 +82,7 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   if (!currentEvent) return null;
 
   const isOrganizer = currentEvent.organizer_id === user?.id;
-  const { date, time } = formatDateTime(currentEvent.date_time);
+  const { fullDate, time } = formatDateTime(currentEvent.date_time);
 
   const handleStatusChange = async (newStatus: string) => {
     if (newStatus === currentEvent.status) return;
@@ -119,7 +99,7 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `${currentEvent.name}\n\n日時: ${date} ${time}\n場所: ${currentEvent.location}\n参加費: ¥${currentEvent.fee.toLocaleString()}\n\n参加コード: ${currentEvent.event_code}`,
+        message: `${currentEvent.name}\n\n日時: ${fullDate} ${time}\n場所: ${currentEvent.location}\n参加費: ¥${currentEvent.fee.toLocaleString()}\n\n参加コード: ${currentEvent.event_code}`,
       });
     } catch (error) {
       logger.error('Share failed:', error);
@@ -233,7 +213,7 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
           </View>
           <View style={styles.detailContent}>
             <Text style={styles.detailLabel}>日時</Text>
-            <Text style={styles.detailValue}>{date}</Text>
+            <Text style={styles.detailValue}>{fullDate}</Text>
             <Text style={styles.detailSubValue}>{time} 開始</Text>
           </View>
         </View>
@@ -1260,72 +1240,129 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   );
 };
 
-// Stats Tab
+// Stats Tab - 対戦結果統計
 const StatsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
-  const { currentEvent, participants, fetchParticipants, isLoading } = useEventStore();
-  const { user } = useAuthStore();
+  const { tournament, matches, fetchTournament, isLoading } = useMatchStore();
 
   useFocusEffect(
     useCallback(() => {
-      fetchParticipants(eventId);
+      fetchTournament(eventId);
     }, [eventId])
   );
 
-  const isOrganizer = currentEvent?.organizer_id === user?.id;
+  // 完了した試合のみを対象
+  const completedMatches = matches.filter((m) => m.status === 'completed');
 
-  // Calculate statistics
-  const totalParticipants = participants.length;
-  const attendingCount = participants.filter((p) => p.attendance_status === 'attending').length;
-  const notAttendingCount = participants.filter((p) => p.attendance_status === 'not_attending').length;
-  const pendingCount = participants.filter((p) => p.attendance_status === 'pending').length;
+  // チーム/個人ごとの勝敗統計を計算
+  const teamStats = new Map<string, {
+    id: string;
+    name: string;
+    color: string;
+    wins: number;
+    losses: number;
+    draws: number;
+    played: number;
+    pointsFor: number;
+    pointsAgainst: number;
+  }>();
 
-  const paidCount = participants.filter((p) => p.payment_status === 'paid').length;
-  const unpaidCount = participants.filter((p) => p.payment_status === 'unpaid' && p.attendance_status === 'attending').length;
-  const pendingConfirmationCount = participants.filter((p) => p.payment_status === 'pending_confirmation').length;
+  completedMatches.forEach((match) => {
+    if (!match.team1_id || !match.team2_id) return;
 
-  const totalExpectedRevenue = currentEvent ? attendingCount * currentEvent.fee : 0;
-  const totalCollectedRevenue = currentEvent ? paidCount * currentEvent.fee : 0;
-  const collectionRate = attendingCount > 0 ? Math.round((paidCount / attendingCount) * 100) : 0;
-  const attendanceRate = totalParticipants > 0 ? Math.round((attendingCount / totalParticipants) * 100) : 0;
+    // チーム1の統計を初期化
+    if (!teamStats.has(match.team1_id) && match.team1) {
+      teamStats.set(match.team1_id, {
+        id: match.team1_id,
+        name: match.team1.name,
+        color: match.team1.color,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        played: 0,
+        pointsFor: 0,
+        pointsAgainst: 0,
+      });
+    }
 
-  // Gender distribution (from participant's gender field)
-  const genderStats = {
-    male: participants.filter((p) => p.gender === 'male' && p.attendance_status === 'attending').length,
-    female: participants.filter((p) => p.gender === 'female' && p.attendance_status === 'attending').length,
-    other: participants.filter((p) => (p.gender === 'other' || !p.gender) && p.attendance_status === 'attending').length,
-  };
+    // チーム2の統計を初期化
+    if (!teamStats.has(match.team2_id) && match.team2) {
+      teamStats.set(match.team2_id, {
+        id: match.team2_id,
+        name: match.team2.name,
+        color: match.team2.color,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        played: 0,
+        pointsFor: 0,
+        pointsAgainst: 0,
+      });
+    }
 
-  // Skill level distribution (from participant's skill_level field: 1=beginner, 2=intermediate, 3=advanced)
-  const skillStats = {
-    beginner: participants.filter((p) => p.skill_level === 1 && p.attendance_status === 'attending').length,
-    intermediate: participants.filter((p) => p.skill_level === 2 && p.attendance_status === 'attending').length,
-    advanced: participants.filter((p) => p.skill_level === 3 && p.attendance_status === 'attending').length,
-    unknown: participants.filter((p) => !p.skill_level && p.attendance_status === 'attending').length,
-  };
+    const team1Stats = teamStats.get(match.team1_id);
+    const team2Stats = teamStats.get(match.team2_id);
 
-  const renderStatBar = (value: number, total: number, color: string) => {
-    const percentage = total > 0 ? (value / total) * 100 : 0;
-    return (
-      <View style={statsStyles.statBarContainer}>
-        <View style={statsStyles.statBarBg}>
-          <View style={[statsStyles.statBarFill, { width: `${percentage}%`, backgroundColor: color }]} />
-        </View>
-        <Text style={statsStyles.statBarText}>{value}人 ({Math.round(percentage)}%)</Text>
-      </View>
-    );
-  };
+    if (!team1Stats || !team2Stats) return;
 
-  if (!isOrganizer) {
+    const score1 = match.team1_score ?? 0;
+    const score2 = match.team2_score ?? 0;
+
+    team1Stats.played++;
+    team2Stats.played++;
+    team1Stats.pointsFor += score1;
+    team1Stats.pointsAgainst += score2;
+    team2Stats.pointsFor += score2;
+    team2Stats.pointsAgainst += score1;
+
+    if (score1 > score2) {
+      team1Stats.wins++;
+      team2Stats.losses++;
+    } else if (score2 > score1) {
+      team2Stats.wins++;
+      team1Stats.losses++;
+    } else {
+      team1Stats.draws++;
+      team2Stats.draws++;
+    }
+  });
+
+  // 勝利数でソート
+  const sortedTeams = Array.from(teamStats.values()).sort((a, b) => {
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    const aPointDiff = a.pointsFor - a.pointsAgainst;
+    const bPointDiff = b.pointsFor - b.pointsAgainst;
+    if (bPointDiff !== aPointDiff) return bPointDiff - aPointDiff;
+    return b.pointsFor - a.pointsFor;
+  });
+
+  // トーナメントがない場合
+  if (!tournament) {
     return (
       <View style={statsStyles.noAccessContainer}>
-        <Lock size={48} color={colors.gray[300]} />
-        <Text style={statsStyles.noAccessTitle}>主催者限定</Text>
+        <BarChart3 size={48} color={colors.gray[300]} />
+        <Text style={statsStyles.noAccessTitle}>対戦データなし</Text>
         <Text style={statsStyles.noAccessMessage}>
-          この統計情報はイベント主催者のみ閲覧できます
+          対戦表を作成すると、ここに結果統計が表示されます
         </Text>
       </View>
     );
   }
+
+  // 試合がない場合
+  if (completedMatches.length === 0) {
+    return (
+      <View style={statsStyles.noAccessContainer}>
+        <BarChart3 size={48} color={colors.gray[300]} />
+        <Text style={statsStyles.noAccessTitle}>試合結果なし</Text>
+        <Text style={statsStyles.noAccessMessage}>
+          試合結果を入力すると、ここに統計が表示されます
+        </Text>
+      </View>
+    );
+  }
+
+  const totalMatches = completedMatches.length;
+  const totalPoints = completedMatches.reduce((sum, m) => sum + (m.team1_score ?? 0) + (m.team2_score ?? 0), 0);
 
   return (
     <ScrollView
@@ -1334,14 +1371,14 @@ const StatsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
       refreshControl={
         <RefreshControl
           refreshing={isLoading}
-          onRefresh={() => fetchParticipants(eventId)}
+          onRefresh={() => fetchTournament(eventId)}
           colors={[colors.primary]}
           tintColor={colors.primary}
         />
       }
       showsVerticalScrollIndicator={false}
     >
-      {/* Overview Stats */}
+      {/* 概要 */}
       <Card variant="elevated" style={statsStyles.statsCard}>
         <View style={styles.cardHeader}>
           <BarChart3 size={18} color={colors.primary} style={styles.cardHeaderIconStyle} />
@@ -1351,157 +1388,123 @@ const StatsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         <View style={statsStyles.overviewGrid}>
           <View style={[statsStyles.overviewItem, statsStyles.overviewItemPrimary]}>
             <Users size={20} color={colors.primary} />
-            <Text style={statsStyles.overviewValue}>{totalParticipants}</Text>
-            <Text style={statsStyles.overviewLabel}>総メンバー</Text>
+            <Text style={statsStyles.overviewValue}>{sortedTeams.length}</Text>
+            <Text style={statsStyles.overviewLabel}>参加チーム</Text>
           </View>
           <View style={[statsStyles.overviewItem, statsStyles.overviewItemSuccess]}>
-            <UserCheck size={20} color={colors.success} />
-            <Text style={statsStyles.overviewValue}>{attendingCount}</Text>
-            <Text style={statsStyles.overviewLabel}>参加</Text>
+            <TrendingUp size={20} color={colors.success} />
+            <Text style={statsStyles.overviewValue}>{totalMatches}</Text>
+            <Text style={statsStyles.overviewLabel}>試合数</Text>
           </View>
           <View style={[statsStyles.overviewItem, statsStyles.overviewItemWarning]}>
-            <Clock size={20} color={colors.warning} />
-            <Text style={statsStyles.overviewValue}>{pendingCount}</Text>
-            <Text style={statsStyles.overviewLabel}>未回答</Text>
-          </View>
-          <View style={[statsStyles.overviewItem, statsStyles.overviewItemError]}>
-            <UserX size={20} color={colors.error} />
-            <Text style={statsStyles.overviewValue}>{notAttendingCount}</Text>
-            <Text style={statsStyles.overviewLabel}>不参加</Text>
+            <PieChart size={20} color={colors.warning} />
+            <Text style={statsStyles.overviewValue}>{totalPoints}</Text>
+            <Text style={statsStyles.overviewLabel}>総得点</Text>
           </View>
         </View>
       </Card>
 
-      {/* Attendance Rate */}
+      {/* 勝利ランキング */}
       <Card variant="elevated" style={statsStyles.statsCard}>
         <View style={styles.cardHeader}>
           <TrendingUp size={18} color={colors.success} style={styles.cardHeaderIconStyle} />
-          <Text style={styles.cardHeaderTitle}>参加率</Text>
+          <Text style={styles.cardHeaderTitle}>勝利ランキング</Text>
         </View>
 
-        <View style={statsStyles.rateContainer}>
-          <View style={statsStyles.rateCircle}>
-            <Text style={statsStyles.rateValue}>{attendanceRate}%</Text>
-          </View>
-          <View style={statsStyles.rateDetails}>
-            <View style={statsStyles.rateRow}>
-              <View style={[statsStyles.rateDot, { backgroundColor: colors.success }]} />
-              <Text style={statsStyles.rateLabel}>参加</Text>
-              <Text style={statsStyles.rateCount}>{attendingCount}人</Text>
-            </View>
-            <View style={statsStyles.rateRow}>
-              <View style={[statsStyles.rateDot, { backgroundColor: colors.error }]} />
-              <Text style={statsStyles.rateLabel}>不参加</Text>
-              <Text style={statsStyles.rateCount}>{notAttendingCount}人</Text>
-            </View>
-            <View style={statsStyles.rateRow}>
-              <View style={[statsStyles.rateDot, { backgroundColor: colors.warning }]} />
-              <Text style={statsStyles.rateLabel}>未回答</Text>
-              <Text style={statsStyles.rateCount}>{pendingCount}人</Text>
-            </View>
-          </View>
-        </View>
-      </Card>
-
-      {/* Payment Statistics */}
-      <Card variant="elevated" style={statsStyles.statsCard}>
-        <View style={styles.cardHeader}>
-          <CircleDollarSign size={18} color={colors.primary} style={styles.cardHeaderIconStyle} />
-          <Text style={styles.cardHeaderTitle}>集金状況</Text>
-        </View>
-
-        <View style={statsStyles.paymentOverview}>
-          <View style={statsStyles.paymentItem}>
-            <Text style={statsStyles.paymentLabel}>回収済</Text>
-            <Text style={[statsStyles.paymentValue, { color: colors.success }]}>
-              ¥{totalCollectedRevenue.toLocaleString()}
-            </Text>
-          </View>
-          <View style={statsStyles.paymentDivider} />
-          <View style={statsStyles.paymentItem}>
-            <Text style={statsStyles.paymentLabel}>予定総額</Text>
-            <Text style={statsStyles.paymentValue}>
-              ¥{totalExpectedRevenue.toLocaleString()}
-            </Text>
-          </View>
-        </View>
-
-        <View style={statsStyles.collectionProgress}>
-          <View style={statsStyles.progressHeader}>
-            <Text style={statsStyles.progressLabel}>回収率</Text>
-            <Text style={statsStyles.progressPercent}>{collectionRate}%</Text>
-          </View>
-          <View style={statsStyles.progressBar}>
-            <View style={[statsStyles.progressFill, { width: `${collectionRate}%` }]} />
-          </View>
-        </View>
-
-        <View style={statsStyles.paymentBreakdown}>
-          <View style={statsStyles.breakdownRow}>
-            <View style={[statsStyles.breakdownDot, { backgroundColor: colors.success }]} />
-            <Text style={statsStyles.breakdownLabel}>支払い済</Text>
-            <Text style={statsStyles.breakdownCount}>{paidCount}人</Text>
-          </View>
-          <View style={statsStyles.breakdownRow}>
-            <View style={[statsStyles.breakdownDot, { backgroundColor: colors.warning }]} />
-            <Text style={statsStyles.breakdownLabel}>確認待ち</Text>
-            <Text style={statsStyles.breakdownCount}>{pendingConfirmationCount}人</Text>
-          </View>
-          <View style={statsStyles.breakdownRow}>
-            <View style={[statsStyles.breakdownDot, { backgroundColor: colors.gray[400] }]} />
-            <Text style={statsStyles.breakdownLabel}>未払い</Text>
-            <Text style={statsStyles.breakdownCount}>{unpaidCount}人</Text>
-          </View>
+        <View style={statsStyles.rankingList}>
+          {sortedTeams.map((team, index) => {
+            const winRate = team.played > 0 ? Math.round((team.wins / team.played) * 100) : 0;
+            return (
+              <View key={team.id} style={statsStyles.rankingItem}>
+                <View style={statsStyles.rankingLeft}>
+                  <View style={[
+                    statsStyles.rankBadge,
+                    index === 0 && statsStyles.rankBadgeGold,
+                    index === 1 && statsStyles.rankBadgeSilver,
+                    index === 2 && statsStyles.rankBadgeBronze,
+                  ]}>
+                    <Text style={[
+                      statsStyles.rankNumber,
+                      index < 3 && statsStyles.rankNumberTop,
+                    ]}>{index + 1}</Text>
+                  </View>
+                  <View style={[statsStyles.teamColorDot, { backgroundColor: team.color }]} />
+                  <Text style={statsStyles.teamName} numberOfLines={1}>{team.name}</Text>
+                </View>
+                <View style={statsStyles.rankingRight}>
+                  <View style={statsStyles.statColumn}>
+                    <Text style={statsStyles.statMainValue}>{team.wins}</Text>
+                    <Text style={statsStyles.statSubLabel}>勝</Text>
+                  </View>
+                  <View style={statsStyles.statColumn}>
+                    <Text style={[statsStyles.statMainValue, { color: colors.gray[500] }]}>{team.draws}</Text>
+                    <Text style={statsStyles.statSubLabel}>分</Text>
+                  </View>
+                  <View style={statsStyles.statColumn}>
+                    <Text style={[statsStyles.statMainValue, { color: colors.error }]}>{team.losses}</Text>
+                    <Text style={statsStyles.statSubLabel}>敗</Text>
+                  </View>
+                  <View style={[statsStyles.statColumn, statsStyles.winRateColumn]}>
+                    <Text style={statsStyles.winRateValue}>{winRate}%</Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })}
         </View>
       </Card>
 
-      {/* Gender Distribution */}
+      {/* 得点ランキング */}
       <Card variant="elevated" style={statsStyles.statsCard}>
         <View style={styles.cardHeader}>
           <PieChart size={18} color={colors.primary} style={styles.cardHeaderIconStyle} />
-          <Text style={styles.cardHeaderTitle}>性別分布 (参加者)</Text>
+          <Text style={styles.cardHeaderTitle}>得点ランキング</Text>
         </View>
 
-        <View style={statsStyles.distributionList}>
-          <View style={statsStyles.distributionRow}>
-            <Text style={statsStyles.distributionLabel}>男性</Text>
-            {renderStatBar(genderStats.male, attendingCount, colors.info)}
-          </View>
-          <View style={statsStyles.distributionRow}>
-            <Text style={statsStyles.distributionLabel}>女性</Text>
-            {renderStatBar(genderStats.female, attendingCount, colors.error)}
-          </View>
-          <View style={statsStyles.distributionRow}>
-            <Text style={statsStyles.distributionLabel}>その他/未設定</Text>
-            {renderStatBar(genderStats.other, attendingCount, colors.gray[400])}
-          </View>
-        </View>
-      </Card>
-
-      {/* Skill Level Distribution */}
-      <Card variant="elevated" style={statsStyles.statsCard}>
-        <View style={styles.cardHeader}>
-          <TrendingUp size={18} color={colors.warning} style={styles.cardHeaderIconStyle} />
-          <Text style={styles.cardHeaderTitle}>スキルレベル分布 (参加者)</Text>
-        </View>
-
-        <View style={statsStyles.distributionList}>
-          <View style={statsStyles.distributionRow}>
-            <Text style={statsStyles.distributionLabel}>初級</Text>
-            {renderStatBar(skillStats.beginner, attendingCount, colors.success)}
-          </View>
-          <View style={statsStyles.distributionRow}>
-            <Text style={statsStyles.distributionLabel}>中級</Text>
-            {renderStatBar(skillStats.intermediate, attendingCount, colors.warning)}
-          </View>
-          <View style={statsStyles.distributionRow}>
-            <Text style={statsStyles.distributionLabel}>上級</Text>
-            {renderStatBar(skillStats.advanced, attendingCount, colors.error)}
-          </View>
-          <View style={statsStyles.distributionRow}>
-            <Text style={statsStyles.distributionLabel}>未設定</Text>
-            {renderStatBar(skillStats.unknown, attendingCount, colors.gray[400])}
-          </View>
+        <View style={statsStyles.rankingList}>
+          {[...sortedTeams]
+            .sort((a, b) => b.pointsFor - a.pointsFor)
+            .map((team, index) => {
+              const pointDiff = team.pointsFor - team.pointsAgainst;
+              return (
+                <View key={team.id} style={statsStyles.rankingItem}>
+                  <View style={statsStyles.rankingLeft}>
+                    <View style={[
+                      statsStyles.rankBadge,
+                      index === 0 && statsStyles.rankBadgeGold,
+                      index === 1 && statsStyles.rankBadgeSilver,
+                      index === 2 && statsStyles.rankBadgeBronze,
+                    ]}>
+                      <Text style={[
+                        statsStyles.rankNumber,
+                        index < 3 && statsStyles.rankNumberTop,
+                      ]}>{index + 1}</Text>
+                    </View>
+                    <View style={[statsStyles.teamColorDot, { backgroundColor: team.color }]} />
+                    <Text style={statsStyles.teamName} numberOfLines={1}>{team.name}</Text>
+                  </View>
+                  <View style={statsStyles.rankingRight}>
+                    <View style={statsStyles.pointsColumn}>
+                      <Text style={statsStyles.pointsValue}>{team.pointsFor}</Text>
+                      <Text style={statsStyles.pointsLabel}>得点</Text>
+                    </View>
+                    <View style={statsStyles.pointsColumn}>
+                      <Text style={[statsStyles.pointsValue, { color: colors.gray[500] }]}>{team.pointsAgainst}</Text>
+                      <Text style={statsStyles.pointsLabel}>失点</Text>
+                    </View>
+                    <View style={[statsStyles.pointsColumn, statsStyles.pointDiffColumn]}>
+                      <Text style={[
+                        statsStyles.pointDiffValue,
+                        pointDiff > 0 && { color: colors.success },
+                        pointDiff < 0 && { color: colors.error },
+                      ]}>
+                        {pointDiff > 0 ? '+' : ''}{pointDiff}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
         </View>
       </Card>
 
@@ -1724,6 +1727,115 @@ const statsStyles = StyleSheet.create({
     color: colors.gray[500],
     textAlign: 'center',
   },
+  // ランキング用スタイル
+  rankingList: {
+    gap: spacing.sm,
+  },
+  rankingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[100],
+  },
+  rankingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: spacing.sm,
+  },
+  rankingRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  rankBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.gray[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rankBadgeGold: {
+    backgroundColor: '#FFD700',
+  },
+  rankBadgeSilver: {
+    backgroundColor: '#C0C0C0',
+  },
+  rankBadgeBronze: {
+    backgroundColor: '#CD7F32',
+  },
+  rankNumber: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[600],
+  },
+  rankNumberTop: {
+    color: colors.white,
+  },
+  teamColorDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  teamName: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '500',
+    color: colors.gray[900],
+    flex: 1,
+  },
+  statColumn: {
+    alignItems: 'center',
+    minWidth: 32,
+  },
+  statMainValue: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '700',
+    color: colors.success,
+  },
+  statSubLabel: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[400],
+  },
+  winRateColumn: {
+    minWidth: 45,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+  },
+  winRateValue: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  pointsColumn: {
+    alignItems: 'center',
+    minWidth: 40,
+  },
+  pointsValue: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  pointsLabel: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[400],
+  },
+  pointDiffColumn: {
+    minWidth: 45,
+    backgroundColor: colors.gray[50],
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+  },
+  pointDiffValue: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[600],
+  },
 });
 
 export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
@@ -1889,7 +2001,7 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         <Tab.Screen name="Matches" options={{ title: '対戦表' }}>
           {() => <MatchesTab eventId={eventId} />}
         </Tab.Screen>
-        <Tab.Screen name="Stats" options={{ title: '統計' }}>
+        <Tab.Screen name="Stats" options={{ title: '結果' }}>
           {() => <StatsTab eventId={eventId} />}
         </Tab.Screen>
       </Tab.Navigator>
