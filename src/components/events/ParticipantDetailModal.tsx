@@ -31,6 +31,7 @@ interface ParticipantDetailModalProps {
     gender?: GenderType;
   }) => Promise<void>;
   onRemove: (participantId: string) => Promise<void>;
+  onCheckIn?: (participantId: string, attended: boolean | null) => Promise<void>;
 }
 
 const ATTENDANCE_OPTIONS: { value: AttendanceStatus; label: string; color: string }[] = [
@@ -46,6 +47,12 @@ const PAYMENT_OPTIONS: { value: PaymentStatus; label: string }[] = [
   { value: 'unpaid', label: '未払い' },
 ];
 
+const ACTUAL_ATTENDANCE_OPTIONS: { value: boolean | null; label: string; color: string }[] = [
+  { value: true, label: '出席', color: colors.success },
+  { value: false, label: '欠席', color: colors.error },
+  { value: null, label: '未確認', color: colors.gray[500] },
+];
+
 export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
   visible,
   onClose,
@@ -55,6 +62,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
   genderSettings,
   onUpdate,
   onRemove,
+  onCheckIn,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -65,6 +73,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
   const [editPayment, setEditPayment] = useState<PaymentStatus>('unpaid');
   const [editSkillLevel, setEditSkillLevel] = useState<number | undefined>(undefined);
   const [editGender, setEditGender] = useState<GenderType | undefined>(undefined);
+  const [editActualAttendance, setEditActualAttendance] = useState<boolean | null>(null);
 
   // Initialize form when participant changes
   useEffect(() => {
@@ -75,6 +84,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
       setEditPayment(participant.payment_status);
       setEditSkillLevel(participant.skill_level ?? undefined);
       setEditGender(participant.gender ?? undefined);
+      setEditActualAttendance(participant.actual_attendance ?? null);
     }
   }, [participant]);
 
@@ -112,6 +122,12 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
       }
 
       await onUpdate(participant.id, updateData);
+
+      // Update actual attendance if changed and onCheckIn is provided
+      if (onCheckIn && editActualAttendance !== participant.actual_attendance) {
+        await onCheckIn(participant.id, editActualAttendance);
+      }
+
       setIsEditing(false);
     } catch (error) {
       // Error handled by parent
@@ -256,16 +272,14 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                 )}
 
                 {/* Actual Attendance */}
-                {participant.actual_attendance !== null && (
-                  <View style={styles.infoSection}>
-                    <Text style={styles.sectionTitle}>当日の出席</Text>
-                    <Badge
-                      label={participant.actual_attendance ? '出席確認済み' : '欠席'}
-                      color={participant.actual_attendance ? 'success' : 'error'}
-                      size="md"
-                    />
-                  </View>
-                )}
+                <View style={styles.infoSection}>
+                  <Text style={styles.sectionTitle}>当日の出席</Text>
+                  <Badge
+                    label={participant.actual_attendance === true ? '出席' : participant.actual_attendance === false ? '欠席' : '未確認'}
+                    color={participant.actual_attendance === true ? 'success' : participant.actual_attendance === false ? 'error' : 'default'}
+                    size="md"
+                  />
+                </View>
 
                 {/* Registered User Info */}
                 {!isManual && participant.user && (
@@ -359,6 +373,41 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                     ))}
                   </View>
                 </View>
+
+                {/* Actual Attendance */}
+                {onCheckIn && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionLabel}>当日の出席</Text>
+                    <View style={styles.optionsRow}>
+                      {ACTUAL_ATTENDANCE_OPTIONS.map((option) => (
+                        <TouchableOpacity
+                          key={String(option.value)}
+                          style={[
+                            styles.optionButton,
+                            editActualAttendance === option.value && {
+                              backgroundColor: option.color + '15',
+                              borderColor: option.color,
+                            },
+                          ]}
+                          onPress={() => setEditActualAttendance(option.value)}
+                          activeOpacity={0.7}
+                        >
+                          {editActualAttendance === option.value && (
+                            <Check size={14} color={option.color} style={styles.checkIcon} />
+                          )}
+                          <Text
+                            style={[
+                              styles.optionText,
+                              editActualAttendance === option.value && { color: option.color, fontWeight: '600' },
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
 
                 {/* Skill Level */}
                 {skillLevelSettings?.enabled && skillLevelSettings.options && (

@@ -372,7 +372,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const { user } = useAuthStore();
   const { showToast } = useToast();
   const [showAddModal, setShowAddModal] = React.useState(false);
-  const [checkInMode, setCheckInMode] = React.useState(false);
   const [selectedParticipant, setSelectedParticipant] = React.useState<EventParticipant | null>(null);
   const [showDetailModal, setShowDetailModal] = React.useState(false);
 
@@ -458,7 +457,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     }
   };
 
-  const handleCheckIn = async (participantId: string, attended: boolean) => {
+  const handleCheckIn = async (participantId: string, attended: boolean | null) => {
     try {
       await checkInParticipant(participantId, attended);
     } catch (error: any) {
@@ -666,33 +665,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         </Card>
       )}
 
-      {/* Check-in Mode Toggle (Organizer Only) */}
-      {isOrganizer && (
-        <TouchableOpacity
-          style={[styles.checkInModeToggleButton, checkInMode && styles.checkInModeToggleButtonActive]}
-          onPress={() => setCheckInMode(!checkInMode)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.checkInModeToggleContent}>
-            <View style={[styles.checkInModeIcon, checkInMode && styles.checkInModeIconActive]}>
-              <Text style={styles.checkInModeIconText}>{checkInMode ? '✓' : '○'}</Text>
-            </View>
-            <View style={styles.checkInModeTextContainer}>
-              <Text style={[styles.checkInModeToggleTitle, checkInMode && styles.checkInModeToggleTitleActive]}>
-                実際の出席を記録
-              </Text>
-              <Text style={[styles.checkInModeToggleSubtitle, checkInMode && styles.checkInModeToggleSubtitleActive]}>
-                {checkInMode ? '当日の出欠を記録中' : 'タップして記録を開始'}
-              </Text>
-            </View>
-            <View style={[styles.checkInModeBadge, checkInMode && styles.checkInModeBadgeActive]}>
-              <Text style={[styles.checkInModeBadgeText, checkInMode && styles.checkInModeBadgeTextActive]}>
-                {checkInMode ? 'ON' : 'OFF'}
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      )}
 
       {/* Summary Stats */}
       <Card variant="elevated" style={styles.summaryCard}>
@@ -724,8 +696,8 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
           </View>
         </View>
 
-        {/* Actual Attendance Summary (Organizer Only, Check-in Mode) */}
-        {isOrganizer && checkInMode && (
+        {/* Actual Attendance Summary (Organizer Only) */}
+        {isOrganizer && (
           <>
             <View style={styles.summaryDivider} />
             <Text style={styles.summaryCardTitle}>実際の出席状況</Text>
@@ -774,7 +746,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="attending"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
-              checkInMode={checkInMode && isOrganizer}
+              checkInMode={isOrganizer}
               onCheckIn={handleCheckIn}
               isOrganizer={isOrganizer}
               onPress={handleOpenParticipantDetail}
@@ -797,7 +769,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="maybe"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
-              checkInMode={checkInMode && isOrganizer}
+              checkInMode={isOrganizer}
               onCheckIn={handleCheckIn}
               isOrganizer={isOrganizer}
               onPress={handleOpenParticipantDetail}
@@ -820,7 +792,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="not_attending"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
-              checkInMode={checkInMode && isOrganizer}
+              checkInMode={isOrganizer}
               onCheckIn={handleCheckIn}
               isOrganizer={isOrganizer}
               onPress={handleOpenParticipantDetail}
@@ -843,7 +815,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="pending"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
-              checkInMode={checkInMode && isOrganizer}
+              checkInMode={isOrganizer}
               onCheckIn={handleCheckIn}
               isOrganizer={isOrganizer}
               onPress={handleOpenParticipantDetail}
@@ -891,6 +863,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         genderSettings={currentEvent?.gender_settings}
         onUpdate={handleUpdateParticipant}
         onRemove={handleRemoveParticipant}
+        onCheckIn={handleCheckIn}
       />
     </ScrollView>
   );
@@ -956,39 +929,44 @@ const ParticipantCard: React.FC<{
           </View>
         )}
         {checkInMode && onCheckIn && (
-          <View style={styles.checkInButtons}>
+          <View style={styles.checkInButtonsCompact}>
             <TouchableOpacity
               style={[
-                styles.checkInButton,
-                styles.checkInButtonPresent,
-                actualAttendance === true && styles.checkInButtonActive,
+                styles.checkInButtonCompact,
+                actualAttendance === true && styles.checkInButtonCompactActive,
               ]}
-              onPress={() => onCheckIn(participant.id, true)}
+              onPress={(e) => {
+                e.stopPropagation();
+                onCheckIn(participant.id, actualAttendance === true ? null : true);
+              }}
             >
               <Text
                 style={[
-                  styles.checkInButtonText,
-                  actualAttendance === true && styles.checkInButtonTextActive,
+                  styles.checkInButtonCompactText,
+                  actualAttendance === true && styles.checkInButtonCompactTextActive,
                 ]}
               >
-                ✓ 出席
+                ✓
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
-                styles.checkInButton,
-                styles.checkInButtonAbsent,
-                actualAttendance === false && styles.checkInButtonActive,
+                styles.checkInButtonCompact,
+                styles.checkInButtonCompactAbsent,
+                actualAttendance === false && styles.checkInButtonCompactAbsentActive,
               ]}
-              onPress={() => onCheckIn(participant.id, false)}
+              onPress={(e) => {
+                e.stopPropagation();
+                onCheckIn(participant.id, actualAttendance === false ? null : false);
+              }}
             >
               <Text
                 style={[
-                  styles.checkInButtonText,
-                  actualAttendance === false && styles.checkInButtonTextActive,
+                  styles.checkInButtonCompactText,
+                  actualAttendance === false && styles.checkInButtonCompactAbsentTextActive,
                 ]}
               >
-                ✕ 欠席
+                ✕
               </Text>
             </TouchableOpacity>
           </View>
@@ -3391,80 +3369,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // Check-in Mode Toggle Button
-  checkInModeToggleButton: {
-    backgroundColor: colors.white,
-    borderRadius: borderRadius.xl,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    borderWidth: 2,
-    borderColor: colors.gray[200],
-    ...shadows.sm,
-  },
-  checkInModeToggleButtonActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
-  },
-  checkInModeToggleContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkInModeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.gray[100],
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: spacing.md,
-  },
-  checkInModeIconActive: {
-    backgroundColor: colors.primary,
-  },
-  checkInModeIconText: {
-    fontSize: typography.fontSize.lg,
-    fontWeight: '700',
-    color: colors.gray[600],
-  },
-  checkInModeTextContainer: {
-    flex: 1,
-  },
-  checkInModeToggleTitle: {
-    fontSize: typography.fontSize.base,
-    fontWeight: '600',
-    color: colors.gray[700],
-  },
-  checkInModeToggleTitleActive: {
-    color: colors.primary,
-  },
-  checkInModeToggleSubtitle: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[500],
-    marginTop: 2,
-  },
-  checkInModeToggleSubtitleActive: {
-    color: colors.primary,
-  },
-  checkInModeBadge: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.gray[200],
-    minWidth: 50,
-    alignItems: 'center',
-  },
-  checkInModeBadgeActive: {
-    backgroundColor: colors.primary,
-  },
-  checkInModeBadgeText: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '700',
-    color: colors.gray[600],
-  },
-  checkInModeBadgeTextActive: {
-    color: colors.white,
-  },
-
   // Summary Card
   summaryCard: {
     padding: spacing.md,
@@ -3522,6 +3426,45 @@ const styles = StyleSheet.create({
     color: colors.gray[700],
   },
   checkInButtonTextActive: {
+    color: colors.white,
+  },
+
+  // Compact Check-in Buttons
+  checkInButtonsCompact: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  checkInButtonCompact: {
+    width: 28,
+    height: 28,
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: colors.gray[300],
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkInButtonCompactActive: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+  },
+  checkInButtonCompactAbsent: {
+    borderColor: colors.gray[300],
+  },
+  checkInButtonCompactAbsentActive: {
+    backgroundColor: colors.error,
+    borderColor: colors.error,
+  },
+  checkInButtonCompactText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[400],
+  },
+  checkInButtonCompactTextActive: {
+    color: colors.white,
+  },
+  checkInButtonCompactAbsentTextActive: {
     color: colors.white,
   },
 

@@ -34,7 +34,7 @@ interface EventState {
   confirmPayment: (participantId: string) => Promise<void>;
 
   // Actual attendance (check-in)
-  checkInParticipant: (participantId: string, attended: boolean) => Promise<void>;
+  checkInParticipant: (participantId: string, attended: boolean | null) => Promise<void>;
   bulkCheckIn: (participantIds: string[], attended: boolean) => Promise<void>;
 
   // Event lookup
@@ -690,15 +690,17 @@ export const useEventStore = create<EventState>((set, get) => ({
     }
   },
 
-  checkInParticipant: async (participantId: string, attended: boolean) => {
+  checkInParticipant: async (participantId: string, attended: boolean | null) => {
     try {
       set({ isLoading: true, error: null });
+
+      const now = attended !== null ? new Date().toISOString() : null;
 
       const { error } = await supabase
         .from('event_participants')
         .update({
           actual_attendance: attended,
-          checked_in_at: new Date().toISOString(),
+          checked_in_at: now,
         })
         .eq('id', participantId);
 
@@ -708,7 +710,7 @@ export const useEventStore = create<EventState>((set, get) => ({
       set((state) => ({
         participants: state.participants.map((p) =>
           p.id === participantId
-            ? { ...p, actual_attendance: attended, checked_in_at: new Date().toISOString() }
+            ? { ...p, actual_attendance: attended, checked_in_at: now }
             : p
         ),
         isLoading: false,
