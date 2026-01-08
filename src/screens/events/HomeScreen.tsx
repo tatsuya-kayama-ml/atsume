@@ -196,31 +196,35 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     const isOrganizer = item.organizer_id === user?.id;
     const { date, time, isToday, isTomorrow } = formatDate(item.date_time);
     const statusConfig = getStatusConfig(item.status);
+    const isPast = item.status === 'completed';
 
     return (
       <Animated.View
-        entering={FadeInDown.delay(index * 80).springify().damping(15)}
+        entering={FadeInDown.delay(index * 60).springify().damping(15)}
         style={styles.cardWrapper}
       >
         <Card
           variant="elevated"
           onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}
-          style={styles.eventCard}
+          style={[styles.eventCard, isPast && styles.eventCardPast]}
         >
-          {/* Date Banner */}
+          {/* Compact Date Banner */}
           <View style={[
             styles.dateBanner,
             (isToday || isTomorrow) && styles.dateBannerHighlight,
+            isPast && styles.dateBannerPast,
           ]}>
             <Text style={[
               styles.dateText,
               (isToday || isTomorrow) && styles.dateTextHighlight,
+              isPast && styles.dateTextPast,
             ]}>
               {date}
             </Text>
             <Text style={[
               styles.timeText,
               (isToday || isTomorrow) && styles.timeTextHighlight,
+              isPast && styles.timeTextPast,
             ]}>
               {time}
             </Text>
@@ -228,45 +232,34 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
           {/* Content */}
           <View style={styles.cardContent}>
-            <View style={styles.eventHeader}>
-              <Text style={styles.eventName} numberOfLines={2}>
+            {/* Top row: Title and badges */}
+            <View style={styles.eventTitleRow}>
+              <Text style={[styles.eventName, isPast && styles.eventNamePast]} numberOfLines={1}>
                 {item.name}
               </Text>
               <View style={styles.badges}>
                 {isOrganizer && (
                   <Badge label="主催" color="primary" size="sm" />
                 )}
-                <Badge
-                  label={statusConfig.label}
-                  color={statusConfig.color}
-                  size="sm"
-                />
               </View>
             </View>
 
-            <View style={styles.eventMeta}>
+            {/* Meta row */}
+            <View style={styles.eventMetaCompact}>
               <View style={styles.metaItem}>
-                <MapPin size={14} color={colors.gray[400]} style={styles.metaIconStyle} />
-                <Text style={styles.metaText} numberOfLines={1}>{item.location}</Text>
+                <MapPin size={12} color={colors.gray[400]} style={styles.metaIconStyle} />
+                <Text style={styles.metaTextCompact} numberOfLines={1}>{item.location}</Text>
               </View>
-              <View style={styles.metaRow}>
-                <View style={styles.metaItem}>
-                  <Banknote size={14} color={colors.gray[400]} style={styles.metaIconStyle} />
-                  <Text style={styles.feeText}>¥{item.fee.toLocaleString()}</Text>
-                </View>
-                {item.capacity && (
-                  <View style={styles.metaItem}>
-                    <Users size={14} color={colors.gray[400]} style={styles.metaIconStyle} />
-                    <Text style={styles.metaText}>定員 {item.capacity}名</Text>
-                  </View>
-                )}
+              <View style={styles.metaItem}>
+                <Banknote size={12} color={colors.gray[400]} style={styles.metaIconStyle} />
+                <Text style={styles.feeTextCompact}>¥{item.fee.toLocaleString()}</Text>
               </View>
             </View>
           </View>
 
           {/* Arrow indicator */}
           <View style={styles.arrowContainer}>
-            <ChevronRight size={20} color={colors.gray[300]} />
+            <ChevronRight size={18} color={colors.gray[300]} />
           </View>
         </Card>
       </Animated.View>
@@ -349,8 +342,40 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         </AnimatedPressable>
       </View>
 
-      {/* View mode toggle and Stats */}
-      <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.viewModeAndStats}>
+      {/* Compact stats row and view toggle */}
+      <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.headerControls}>
+        {/* Compact Stats Row */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statsChipContainer}
+        >
+          <View style={[styles.statsChip, styles.statsChipPrimary]}>
+            <CalendarIcon size={14} color={colors.primary} />
+            <Text style={[styles.statsChipValue, styles.statsChipValuePrimary]}>{activeEvents.length}</Text>
+            <Text style={styles.statsChipLabel}>予定</Text>
+          </View>
+          <View style={[styles.statsChip, styles.statsChipSuccess]}>
+            <Users size={14} color={colors.success} />
+            <Text style={[styles.statsChipValue, styles.statsChipValueSuccess]}>
+              {activeEvents.filter(e => e.organizer_id === user?.id).length}
+            </Text>
+            <Text style={styles.statsChipLabel}>主催</Text>
+          </View>
+          <View style={[styles.statsChip, styles.statsChipInfo]}>
+            <Ticket size={14} color={colors.info} />
+            <Text style={[styles.statsChipValue, styles.statsChipValueInfo]}>{participatingEvents.length}</Text>
+            <Text style={styles.statsChipLabel}>参加</Text>
+          </View>
+          {pastEvents.length > 0 && (
+            <View style={[styles.statsChip, styles.statsChipGray]}>
+              <CalendarIcon size={14} color={colors.gray[500]} />
+              <Text style={[styles.statsChipValue, styles.statsChipValueGray]}>{pastEvents.length}</Text>
+              <Text style={styles.statsChipLabel}>終了</Text>
+            </View>
+          )}
+        </ScrollView>
+
         {/* View Mode Toggle */}
         <View style={styles.viewModeToggle}>
           <TouchableOpacity
@@ -370,48 +395,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
           >
             <CalendarDays size={16} color={viewMode === 'calendar' ? colors.white : colors.gray[500]} />
           </TouchableOpacity>
-        </View>
-
-        {/* Stats cards - 2x2 Grid */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, styles.statCardPrimary]}>
-              <View style={styles.statIconContainer}>
-                <CalendarIcon size={18} color={colors.primary} />
-              </View>
-              <Text style={styles.statValue}>{activeEvents.length}</Text>
-              <Text style={styles.statLabel}>実施予定</Text>
-            </View>
-            <View style={[styles.statCard, styles.statCardSecondary]}>
-              <View style={[styles.statIconContainer, styles.statIconContainerAlt]}>
-                <Users size={18} color={colors.success} />
-              </View>
-              <Text style={styles.statValue}>
-                {activeEvents.filter(e => e.organizer_id === user?.id).length}
-              </Text>
-              <Text style={styles.statLabel}>主催</Text>
-            </View>
-          </View>
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, styles.statCardInfo]}>
-              <View style={[styles.statIconContainer, styles.statIconContainerInfo]}>
-                <Ticket size={18} color={colors.info} />
-              </View>
-              <Text style={styles.statValue}>
-                {participatingEvents.length}
-              </Text>
-              <Text style={styles.statLabel}>参加</Text>
-            </View>
-            <View style={[styles.statCard, styles.statCardTertiary]}>
-              <View style={[styles.statIconContainer, styles.statIconContainerWarn]}>
-                <CalendarIcon size={18} color={colors.gray[500]} />
-              </View>
-              <Text style={styles.statValue}>
-                {pastEvents.length}
-              </Text>
-              <Text style={styles.statLabel}>終了</Text>
-            </View>
-          </View>
         </View>
       </Animated.View>
     </View>
@@ -691,78 +674,71 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.white,
   },
-  viewModeAndStats: {
-    gap: spacing.md,
+  headerControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  statsChipContainer: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingRight: spacing.sm,
+  },
+  statsChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    gap: 4,
+  },
+  statsChipPrimary: {
+    backgroundColor: colors.primary + '12',
+  },
+  statsChipSuccess: {
+    backgroundColor: colors.success + '12',
+  },
+  statsChipInfo: {
+    backgroundColor: colors.info + '12',
+  },
+  statsChipGray: {
+    backgroundColor: colors.gray[100],
+  },
+  statsChipValue: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+  },
+  statsChipValuePrimary: {
+    color: colors.primary,
+  },
+  statsChipValueSuccess: {
+    color: colors.success,
+  },
+  statsChipValueInfo: {
+    color: colors.info,
+  },
+  statsChipValueGray: {
+    color: colors.gray[600],
+  },
+  statsChipLabel: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[500],
+    fontWeight: '500',
   },
   viewModeToggle: {
     flexDirection: 'row',
-    alignSelf: 'flex-end',
     backgroundColor: colors.gray[100],
     borderRadius: borderRadius.lg,
-    padding: 4,
+    padding: 3,
   },
   viewModeButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     borderRadius: borderRadius.md,
   },
   viewModeButtonActive: {
     backgroundColor: colors.primary,
-  },
-  statsGrid: {
-    gap: spacing.sm,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  statCard: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    borderRadius: borderRadius.xl,
-  },
-  statCardPrimary: {
-    backgroundColor: colors.primary + '08',
-  },
-  statCardSecondary: {
-    backgroundColor: colors.success + '08',
-  },
-  statCardInfo: {
-    backgroundColor: colors.info + '08',
-  },
-  statCardTertiary: {
-    backgroundColor: colors.gray[100],
-  },
-  statIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.primary + '15',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  statIconContainerAlt: {
-    backgroundColor: colors.success + '15',
-  },
-  statIconContainerInfo: {
-    backgroundColor: colors.info + '15',
-  },
-  statIconContainerWarn: {
-    backgroundColor: colors.gray[200],
-  },
-  statValue: {
-    fontSize: typography.fontSize.xl,
-    fontWeight: '700',
-    color: colors.gray[900],
-    marginBottom: spacing['2xs'],
-  },
-  statLabel: {
-    fontSize: typography.fontSize.xs,
-    color: colors.gray[500],
-    fontWeight: '500',
   },
   skeletonContainer: {
     flex: 1,
@@ -773,64 +749,84 @@ const styles = StyleSheet.create({
     paddingBottom: 140,
   },
   cardWrapper: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   eventCard: {
     flexDirection: 'row',
     padding: 0,
     overflow: 'hidden',
+    minHeight: 64,
+  },
+  eventCardPast: {
+    opacity: 0.7,
   },
   dateBanner: {
-    width: 72,
+    width: 56,
     backgroundColor: colors.gray[50],
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
     borderRightWidth: 1,
     borderRightColor: colors.gray[100],
   },
   dateBannerHighlight: {
     backgroundColor: colors.primarySoft,
   },
+  dateBannerPast: {
+    backgroundColor: colors.gray[100],
+  },
   dateText: {
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.xs,
     fontWeight: '700',
     color: colors.gray[700],
-    marginBottom: spacing['2xs'],
+    marginBottom: 2,
+    textAlign: 'center',
   },
   dateTextHighlight: {
     color: colors.primary,
   },
+  dateTextPast: {
+    color: colors.gray[500],
+  },
   timeText: {
-    fontSize: typography.fontSize.xs,
+    fontSize: 10,
     color: colors.gray[500],
     fontWeight: '500',
   },
   timeTextHighlight: {
     color: colors.primaryLight,
   },
+  timeTextPast: {
+    color: colors.gray[400],
+  },
   cardContent: {
     flex: 1,
-    padding: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    justifyContent: 'center',
   },
-  eventHeader: {
-    marginBottom: spacing.sm,
+  eventTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
   eventName: {
-    fontSize: typography.fontSize.lg,
+    flex: 1,
+    fontSize: typography.fontSize.base,
     fontWeight: '600',
     color: colors.gray[900],
-    marginBottom: spacing.sm,
-    lineHeight: typography.fontSize.lg * typography.lineHeight.snug,
+    marginRight: spacing.xs,
+  },
+  eventNamePast: {
+    color: colors.gray[600],
   },
   badges: {
     flexDirection: 'row',
     gap: spacing.xs,
   },
-  eventMeta: {
-    gap: spacing.xs,
-  },
-  metaRow: {
+  eventMetaCompact: {
     flexDirection: 'row',
     gap: spacing.md,
   },
@@ -838,30 +834,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  metaIcon: {
-    fontSize: 12,
-    marginRight: spacing.xs,
-  },
   metaIconStyle: {
-    marginRight: spacing.xs,
+    marginRight: 4,
   },
-  metaText: {
-    fontSize: typography.fontSize.sm,
+  metaTextCompact: {
+    fontSize: typography.fontSize.xs,
     color: colors.gray[500],
+    maxWidth: 120,
   },
-  feeText: {
-    fontSize: typography.fontSize.sm,
+  feeTextCompact: {
+    fontSize: typography.fontSize.xs,
     fontWeight: '600',
-    color: colors.gray[700],
+    color: colors.gray[600],
   },
   arrowContainer: {
     justifyContent: 'center',
-    paddingRight: spacing.md,
-  },
-  arrow: {
-    fontSize: 24,
-    color: colors.gray[300],
-    fontWeight: '300',
+    paddingRight: spacing.sm,
   },
   emptyState: {
     flex: 1,

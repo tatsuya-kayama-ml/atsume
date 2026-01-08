@@ -45,3 +45,12 @@ yarn-error.*
 google-service-account.json
 *.keystore
 .vercel
+
+# Test coverage
+coverage/
+
+# Screenshots (E2E tests)
+screenshots/
+
+# Icon output
+IconKitchen-Output/
