@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,9 @@ import {
   RefreshControl,
   Dimensions,
   Platform,
+  Modal,
+  TextInput,
+  Linking as RNLinking,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect } from '@react-navigation/native';
@@ -39,17 +42,21 @@ import {
   TrendingUp,
   PieChart,
   UserPlus,
+  ExternalLink,
+  X,
+  CreditCard,
 } from 'lucide-react-native';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useMatchStore } from '../../stores/matchStore';
 import { useToast } from '../../contexts/ToastContext';
-import { Button, Card, Badge, Avatar } from '../../components/common';
-import { ReminderModal, AddParticipantModal } from '../../components/events';
+import { Button, Card, Badge, Avatar, ContextHint } from '../../components/common';
+import { ReminderModal, AddParticipantModal, ParticipantDetailModal } from '../../components/events';
 import { TeamsTab } from '../../components/teams';
 import { MatchesTab } from '../../components/matches';
+import { TimerTab } from '../../components/timer';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
-import { RootStackParamList, EventTabParamList, AttendanceStatus, PaymentStatus, GenderType } from '../../types';
+import { RootStackParamList, EventTabParamList, AttendanceStatus, PaymentStatus, GenderType, EventParticipant } from '../../types';
 import { logger, formatDateTime } from '../../utils';
 
 const { width } = Dimensions.get('window');
@@ -359,11 +366,13 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
 // Participants Tab
 const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
-  const { participants, currentEvent, fetchParticipants, updateAttendanceStatus, updateParticipantProfile, addManualParticipant, checkInParticipant, isLoading } = useEventStore();
+  const { participants, currentEvent, fetchParticipants, updateAttendanceStatus, updateParticipantProfile, addManualParticipant, checkInParticipant, updateManualParticipant, removeParticipant, isLoading } = useEventStore();
   const { user } = useAuthStore();
   const { showToast } = useToast();
   const [showAddModal, setShowAddModal] = React.useState(false);
   const [checkInMode, setCheckInMode] = React.useState(false);
+  const [selectedParticipant, setSelectedParticipant] = React.useState<EventParticipant | null>(null);
+  const [showDetailModal, setShowDetailModal] = React.useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -372,6 +381,42 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   );
 
   const isOrganizer = currentEvent?.organizer_id === user?.id;
+
+  // 参加者詳細モーダルを開く
+  const handleOpenParticipantDetail = (participant: EventParticipant) => {
+    if (isOrganizer) {
+      setSelectedParticipant(participant);
+      setShowDetailModal(true);
+    }
+  };
+
+  // 参加者情報を更新
+  const handleUpdateParticipant = async (participantId: string, data: {
+    display_name?: string;
+    attendance_status?: AttendanceStatus;
+    payment_status?: PaymentStatus;
+    skill_level?: number;
+    gender?: GenderType;
+  }) => {
+    try {
+      await updateManualParticipant(participantId, data);
+      showToast('参加者情報を更新しました', 'success');
+    } catch (error: any) {
+      showToast(error.message || '更新に失敗しました', 'error');
+      throw error;
+    }
+  };
+
+  // 参加者を削除
+  const handleRemoveParticipant = async (participantId: string) => {
+    try {
+      await removeParticipant(participantId);
+      showToast('参加者を削除しました', 'success');
+    } catch (error: any) {
+      showToast(error.message || '削除に失敗しました', 'error');
+      throw error;
+    }
+  };
 
   const handleAddParticipant = async (
     name: string,
@@ -492,6 +537,11 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             size="lg"
           />
         </Card>
+      )}
+
+      {/* Context Hint for Participants */}
+      {myParticipation && !isOrganizer && (
+        <ContextHint tooltipId="participant_attendance" />
       )}
 
       {/* My Status Card */}
@@ -724,6 +774,8 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               genderSettings={currentEvent?.gender_settings}
               checkInMode={checkInMode && isOrganizer}
               onCheckIn={handleCheckIn}
+              isOrganizer={isOrganizer}
+              onPress={handleOpenParticipantDetail}
             />
           ))}
         </View>
@@ -745,6 +797,8 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               genderSettings={currentEvent?.gender_settings}
               checkInMode={checkInMode && isOrganizer}
               onCheckIn={handleCheckIn}
+              isOrganizer={isOrganizer}
+              onPress={handleOpenParticipantDetail}
             />
           ))}
         </View>
@@ -766,6 +820,8 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               genderSettings={currentEvent?.gender_settings}
               checkInMode={checkInMode && isOrganizer}
               onCheckIn={handleCheckIn}
+              isOrganizer={isOrganizer}
+              onPress={handleOpenParticipantDetail}
             />
           ))}
         </View>
@@ -787,6 +843,8 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               genderSettings={currentEvent?.gender_settings}
               checkInMode={checkInMode && isOrganizer}
               onCheckIn={handleCheckIn}
+              isOrganizer={isOrganizer}
+              onPress={handleOpenParticipantDetail}
             />
           ))}
         </View>
@@ -817,6 +875,21 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         skillLevelSettings={currentEvent?.skill_level_settings}
         genderSettings={currentEvent?.gender_settings}
       />
+
+      {/* Participant Detail Modal */}
+      <ParticipantDetailModal
+        visible={showDetailModal}
+        onClose={() => {
+          setShowDetailModal(false);
+          setSelectedParticipant(null);
+        }}
+        participant={selectedParticipant}
+        isOrganizer={isOrganizer}
+        skillLevelSettings={currentEvent?.skill_level_settings}
+        genderSettings={currentEvent?.gender_settings}
+        onUpdate={handleUpdateParticipant}
+        onRemove={handleRemoveParticipant}
+      />
     </ScrollView>
   );
 };
@@ -829,7 +902,9 @@ const ParticipantCard: React.FC<{
   genderSettings?: any;
   checkInMode?: boolean;
   onCheckIn?: (participantId: string, attended: boolean) => void;
-}> = ({ participant, status, skillLevelSettings, genderSettings, checkInMode = false, onCheckIn }) => {
+  isOrganizer?: boolean;
+  onPress?: (participant: any) => void;
+}> = ({ participant, status, skillLevelSettings, genderSettings, checkInMode = false, onCheckIn, isOrganizer = false, onPress }) => {
   // For manual participants, use display_name directly; for registered users, use user.display_name
   const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
   const avatarUrl = participant.user?.avatar_url;
@@ -846,8 +921,11 @@ const ParticipantCard: React.FC<{
     ? genderSettings.options?.find((o: any) => o.value === participant.gender)?.label
     : null;
 
+  const CardWrapper = isOrganizer && onPress ? TouchableOpacity : View;
+  const cardProps = isOrganizer && onPress ? { onPress: () => onPress(participant), activeOpacity: 0.7 } : {};
+
   return (
-    <View style={styles.participantCard}>
+    <CardWrapper style={styles.participantCard} {...cardProps}>
       <Avatar name={displayName} imageUrl={avatarUrl} size="md" />
       <View style={styles.participantInfo}>
         <View style={styles.participantNameRow}>
@@ -923,14 +1001,21 @@ const ParticipantCard: React.FC<{
           </View>
         )}
       </View>
-    </View>
+    </CardWrapper>
   );
 };
 
 // Payment Tab
 const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
-  const { participants, currentEvent, fetchParticipants, reportPayment, confirmPayment, updatePaymentStatus, isLoading } = useEventStore();
+  const { participants, currentEvent, fetchParticipants, fetchEventById, updateEvent, reportPayment, confirmPayment, updatePaymentStatus, isLoading } = useEventStore();
   const { user } = useAuthStore();
+  const { showToast } = useToast();
+
+  // Payment link modal state
+  const [showPaymentLinkModal, setShowPaymentLinkModal] = useState(false);
+  const [paymentLinkInput, setPaymentLinkInput] = useState('');
+  const [paymentLinkLabelInput, setPaymentLinkLabelInput] = useState('');
+  const [isSavingLink, setIsSavingLink] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -987,6 +1072,74 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     }
   };
 
+  // Payment link handlers
+  const handleOpenPaymentLinkModal = () => {
+    setPaymentLinkInput(currentEvent?.payment_link || '');
+    setPaymentLinkLabelInput(currentEvent?.payment_link_label || '');
+    setShowPaymentLinkModal(true);
+  };
+
+  const handleSavePaymentLink = async () => {
+    setIsSavingLink(true);
+    try {
+      await updateEvent(eventId, {
+        payment_link: paymentLinkInput.trim() || null,
+        payment_link_label: paymentLinkLabelInput.trim() || null,
+      });
+      await fetchEventById(eventId);
+      setShowPaymentLinkModal(false);
+      showToast('支払いリンクを保存しました', 'success');
+    } catch (error: any) {
+      showToast(error.message || '保存に失敗しました', 'error');
+    } finally {
+      setIsSavingLink(false);
+    }
+  };
+
+  const handleRemovePaymentLink = async () => {
+    Alert.alert(
+      '支払いリンクを削除',
+      '支払いリンクを削除しますか？',
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: async () => {
+            setIsSavingLink(true);
+            try {
+              await updateEvent(eventId, {
+                payment_link: null,
+                payment_link_label: null,
+              });
+              await fetchEventById(eventId);
+              setShowPaymentLinkModal(false);
+              showToast('支払いリンクを削除しました', 'success');
+            } catch (error: any) {
+              showToast(error.message || '削除に失敗しました', 'error');
+            } finally {
+              setIsSavingLink(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleOpenPaymentLink = async () => {
+    if (!currentEvent?.payment_link) return;
+    try {
+      const canOpen = await RNLinking.canOpenURL(currentEvent.payment_link);
+      if (canOpen) {
+        await RNLinking.openURL(currentEvent.payment_link);
+      } else {
+        showToast('リンクを開けません', 'error');
+      }
+    } catch {
+      showToast('リンクを開けません', 'error');
+    }
+  };
+
   return (
     <ScrollView
       style={styles.tabContent}
@@ -1001,6 +1154,82 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
       }
       showsVerticalScrollIndicator={false}
     >
+      {/* Payment Link Card (Organizer - Setup) */}
+      {isOrganizer && (
+        <Card variant="elevated" style={styles.paymentLinkCard}>
+          <View style={styles.paymentLinkHeader}>
+            <View style={styles.paymentLinkTitleRow}>
+              <CreditCard size={18} color={colors.primary} />
+              <Text style={styles.paymentLinkTitle}>支払いリンク</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.paymentLinkEditButton}
+              onPress={handleOpenPaymentLinkModal}
+              activeOpacity={0.7}
+            >
+              <Edit size={16} color={colors.primary} />
+              <Text style={styles.paymentLinkEditText}>
+                {currentEvent?.payment_link ? '編集' : '設定'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {currentEvent?.payment_link ? (
+            <View style={styles.paymentLinkDisplay}>
+              <View style={styles.paymentLinkInfo}>
+                <Text style={styles.paymentLinkLabel}>
+                  {currentEvent.payment_link_label || '支払いリンク'}
+                </Text>
+                <Text style={styles.paymentLinkUrl} numberOfLines={1}>
+                  {currentEvent.payment_link}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.paymentLinkOpenButton}
+                onPress={handleOpenPaymentLink}
+                activeOpacity={0.7}
+              >
+                <ExternalLink size={16} color={colors.white} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.paymentLinkEmpty}>
+              <Text style={styles.paymentLinkEmptyText}>
+                PayPayや銀行振込のリンクを設定すると、参加者に表示されます
+              </Text>
+            </View>
+          )}
+        </Card>
+      )}
+
+      {/* Payment Link Card (Participant - View) */}
+      {!isOrganizer && currentEvent?.payment_link && (
+        <Card variant="elevated" style={styles.paymentLinkCard}>
+          <View style={styles.paymentLinkHeader}>
+            <View style={styles.paymentLinkTitleRow}>
+              <CreditCard size={18} color={colors.primary} />
+              <Text style={styles.paymentLinkTitle}>支払い方法</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.paymentLinkButton}
+            onPress={handleOpenPaymentLink}
+            activeOpacity={0.7}
+          >
+            <View style={styles.paymentLinkButtonContent}>
+              <Text style={styles.paymentLinkButtonLabel}>
+                {currentEvent.payment_link_label || '支払いリンク'}
+              </Text>
+              <Text style={styles.paymentLinkButtonHint}>
+                タップして支払いページを開く
+              </Text>
+            </View>
+            <ExternalLink size={20} color={colors.primary} />
+          </TouchableOpacity>
+        </Card>
+      )}
+
       {/* Payment Summary Card (Organizer) */}
       {isOrganizer && (
         <Card variant="elevated" style={styles.paymentSummaryCard}>
@@ -1054,6 +1283,11 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         </Card>
       )}
 
+      {/* Context Hint for Payment (Participants) */}
+      {!isOrganizer && myParticipation && (
+        <ContextHint tooltipId="participant_payment" />
+      )}
+
       {/* My Payment Action (Non-Organizer) */}
       {!isOrganizer && myParticipation && myParticipation.payment_status !== 'paid' && (
         <Card variant="elevated" style={styles.myPaymentCard}>
@@ -1088,6 +1322,93 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
           )}
         </Card>
       )}
+
+      {/* Payment Link Modal */}
+      <Modal
+        visible={showPaymentLinkModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPaymentLinkModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>支払いリンクを設定</Text>
+              <TouchableOpacity
+                onPress={() => setShowPaymentLinkModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <X size={24} color={colors.gray[500]} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>ラベル（任意）</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={paymentLinkLabelInput}
+                  onChangeText={setPaymentLinkLabelInput}
+                  placeholder="例: PayPay、銀行振込"
+                  placeholderTextColor={colors.gray[400]}
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>URL</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={paymentLinkInput}
+                  onChangeText={setPaymentLinkInput}
+                  placeholder="https://..."
+                  placeholderTextColor={colors.gray[400]}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                />
+              </View>
+
+              <Text style={styles.modalHint}>
+                PayPayの送金リンクや、銀行振込先のURLなどを設定できます。
+                参加者の「集金」タブに表示されます。
+              </Text>
+            </View>
+
+            <View style={styles.modalFooter}>
+              {currentEvent?.payment_link && (
+                <TouchableOpacity
+                  style={styles.modalDeleteButton}
+                  onPress={handleRemovePaymentLink}
+                  disabled={isSavingLink}
+                >
+                  <Trash2 size={18} color={colors.error} />
+                </TouchableOpacity>
+              )}
+              <View style={styles.modalFooterButtons}>
+                <TouchableOpacity
+                  style={styles.modalCancelButton}
+                  onPress={() => setShowPaymentLinkModal(false)}
+                  disabled={isSavingLink}
+                >
+                  <Text style={styles.modalCancelButtonText}>キャンセル</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modalSaveButton,
+                    isSavingLink && styles.modalSaveButtonDisabled,
+                  ]}
+                  onPress={handleSavePaymentLink}
+                  disabled={isSavingLink}
+                >
+                  <Text style={styles.modalSaveButtonText}>
+                    {isSavingLink ? '保存中...' : '保存'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Payment List */}
       <View style={styles.paymentListHeader}>
@@ -2000,6 +2321,9 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         </Tab.Screen>
         <Tab.Screen name="Matches" options={{ title: '対戦表' }}>
           {() => <MatchesTab eventId={eventId} />}
+        </Tab.Screen>
+        <Tab.Screen name="Timer" options={{ title: 'タイマー' }}>
+          {() => <TimerTab eventId={eventId} />}
         </Tab.Screen>
         <Tab.Screen name="Stats" options={{ title: '結果' }}>
           {() => <StatsTab eventId={eventId} />}
@@ -3018,5 +3342,209 @@ const styles = StyleSheet.create({
   // Actual Attendance Badge
   actualAttendanceBadge: {
     marginTop: spacing.xs,
+  },
+
+  // Payment Link Card
+  paymentLinkCard: {
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  paymentLinkHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  paymentLinkTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  paymentLinkTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  paymentLinkEditButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primarySoft,
+  },
+  paymentLinkEditText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  paymentLinkDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.gray[50],
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    gap: spacing.md,
+  },
+  paymentLinkInfo: {
+    flex: 1,
+  },
+  paymentLinkLabel: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[900],
+    marginBottom: 2,
+  },
+  paymentLinkUrl: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+  },
+  paymentLinkOpenButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...shadows.primary,
+  },
+  paymentLinkEmpty: {
+    backgroundColor: colors.gray[50],
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+  },
+  paymentLinkEmptyText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  paymentLinkButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
+  },
+  paymentLinkButtonContent: {
+    flex: 1,
+  },
+  paymentLinkButtonLabel: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  paymentLinkButtonHint: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    marginTop: 2,
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalContent: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.xl,
+    width: '100%',
+    maxWidth: 400,
+    ...shadows.lg,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[200],
+  },
+  modalTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  modalCloseButton: {
+    padding: spacing.xs,
+  },
+  modalBody: {
+    padding: spacing.lg,
+  },
+  inputGroup: {
+    marginBottom: spacing.md,
+  },
+  inputLabel: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[700],
+    marginBottom: spacing.xs,
+  },
+  textInput: {
+    backgroundColor: colors.gray[50],
+    borderWidth: 1,
+    borderColor: colors.gray[300],
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: typography.fontSize.base,
+    color: colors.gray[900],
+  },
+  modalHint: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    lineHeight: 20,
+    marginTop: spacing.sm,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[200],
+  },
+  modalDeleteButton: {
+    padding: spacing.sm,
+  },
+  modalFooterButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalCancelButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.gray[100],
+  },
+  modalCancelButtonText: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[600],
+  },
+  modalSaveButton: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.primary,
+    ...shadows.primary,
+  },
+  modalSaveButtonDisabled: {
+    opacity: 0.6,
+  },
+  modalSaveButtonText: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.white,
   },
 });

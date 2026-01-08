@@ -9,7 +9,7 @@ import { useOnboardingStore } from '../../stores/onboardingStore';
 import { PagerView } from '../../components/PagerView';
 import { colors } from '../../constants/theme';
 
-// スライドデータ
+// スライドデータ - 主催者と参加者両方の視点を含む
 const slides = [
   {
     id: 'welcome',
@@ -18,26 +18,47 @@ const slides = [
     description: 'イベントの参加管理を\nもっと簡単に',
     backgroundColor: colors.primarySoft,
   },
+  // 参加者向け（シンプルな操作説明）
   {
-    id: 'create',
+    id: 'participant_join',
+    icon: 'ticket',
+    title: '参加するには',
+    description: '招待コードを入力して参加\n出欠と支払いを報告するだけ',
+    backgroundColor: colors.successSoft,
+    badge: '参加者向け',
+  },
+  // 主催者向け
+  {
+    id: 'organizer_create',
     icon: 'plus-circle',
     title: 'イベントを作成',
-    description: '日時・場所・参加費を設定して\n招待コードを共有',
+    description: '日時・場所・参加費を設定\n招待コードを共有して集める',
     backgroundColor: colors.secondarySoft,
+    badge: '主催者向け',
   },
   {
-    id: 'manage',
-    icon: 'users',
+    id: 'organizer_manage',
+    icon: 'clipboard-list',
     title: '参加者を管理',
-    description: '出欠・支払い状況を\nリアルタイムで確認',
+    description: '出欠・支払い状況を一覧で確認\nリマインダーも送れます',
     backgroundColor: colors.infoSoft,
+    badge: '主催者向け',
   },
   {
-    id: 'team',
-    icon: 'trophy',
-    title: 'チーム分けも簡単',
-    description: '自動チーム分け機能で\n公平なチームを作成',
+    id: 'organizer_team',
+    icon: 'users',
+    title: 'チーム分け機能',
+    description: 'ランダム or スキル均等で\n自動でチームを振り分け',
     backgroundColor: colors.warningSoft,
+    badge: '主催者向け',
+  },
+  {
+    id: 'organizer_match',
+    icon: 'trophy',
+    title: '対戦表を作成',
+    description: '総当たり戦やトーナメントなど\n試合結果も記録できます',
+    backgroundColor: colors.errorSoft,
+    badge: '主催者向け',
   },
 ];
 
@@ -86,6 +107,7 @@ export const OnboardingScreen: React.FC = () => {
               title={slide.title}
               description={slide.description}
               backgroundColor={slide.backgroundColor}
+              badge={slide.badge}
             />
           </View>
         ))}

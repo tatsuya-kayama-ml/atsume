@@ -24,7 +24,7 @@ import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Calendar as CalendarIcon, MapPin, Banknote, Users, Ticket, Plus, ChevronRight, List, CalendarDays } from 'lucide-react-native';
+import { Calendar as CalendarIcon, MapPin, Banknote, Users, Ticket, Plus, ChevronRight, List, CalendarDays, Timer } from 'lucide-react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -34,6 +34,7 @@ import { useTooltip } from '../../hooks/useTooltip';
 import { Event, RootStackParamList } from '../../types';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { formatDateTime } from '../../utils/dateFormat';
+import { useTimerStore } from '../../stores/timerStore';
 
 // Configure Japanese locale for calendar
 LocaleConfig.locales['ja'] = {
@@ -67,6 +68,7 @@ const getStatusConfig = (status: string) => {
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { events, isLoading, fetchMyEvents } = useEventStore();
   const { user } = useAuthStore();
+  const { activeTimer, startTimer } = useTimerStore();
   const insets = useSafeAreaInsets();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -233,6 +235,29 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
               </View>
             </View>
           </View>
+
+          {/* Timer button */}
+          {!isPast && (
+            <TouchableOpacity
+              style={[
+                styles.timerButton,
+                activeTimer?.eventId === item.id && styles.timerButtonActive,
+              ]}
+              onPress={(e) => {
+                e.stopPropagation();
+                if (Platform.OS !== 'web') {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }
+                navigation.navigate('EventDetail', { eventId: item.id });
+              }}
+              activeOpacity={0.7}
+            >
+              <Timer
+                size={16}
+                color={activeTimer?.eventId === item.id ? colors.primary : colors.gray[400]}
+              />
+            </TouchableOpacity>
+          )}
 
           {/* Arrow indicator */}
           <View style={styles.arrowContainer}>
@@ -827,6 +852,16 @@ const styles = StyleSheet.create({
   arrowContainer: {
     justifyContent: 'center',
     paddingRight: spacing.sm,
+  },
+  timerButton: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  timerButtonActive: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: borderRadius.md,
   },
   emptyState: {
     flex: 1,

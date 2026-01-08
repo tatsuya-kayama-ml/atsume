@@ -8,10 +8,19 @@ export type TooltipId =
   | 'home_create_event'
   | 'home_join_event'
   | 'event_detail_participants'
-  | 'event_detail_share';
+  | 'event_detail_share'
+  // 参加者向け
+  | 'participant_attendance'
+  | 'participant_payment'
+  // 主催者向け - チーム機能
+  | 'organizer_team_setup'
+  | 'organizer_team_edit'
+  // 主催者向け - 対戦表機能
+  | 'organizer_match_create'
+  | 'organizer_match_score';
 
 // ツールチップのコンテンツ定義
-export const TOOLTIP_CONTENT: Record<TooltipId, { title: string; message: string }> = {
+export const TOOLTIP_CONTENT: Record<TooltipId, { title: string; message: string; role?: 'participant' | 'organizer' }> = {
   home_create_event: {
     title: 'イベントを作成しよう',
     message: 'ここからイベントを作成できます。日時や場所、参加費を設定して招待コードを発行しましょう。',
@@ -23,10 +32,44 @@ export const TOOLTIP_CONTENT: Record<TooltipId, { title: string; message: string
   event_detail_participants: {
     title: '参加者を管理',
     message: '参加者の出欠状況や支払い状況をこちらで確認・管理できます。',
+    role: 'organizer',
   },
   event_detail_share: {
     title: '招待コードを共有',
     message: 'このボタンで招待コードを友達に共有できます。',
+  },
+  // 参加者向けヒント
+  participant_attendance: {
+    title: '出欠を報告しよう',
+    message: '参加・不参加・未定をタップして報告してください。主催者に通知されます。',
+    role: 'participant',
+  },
+  participant_payment: {
+    title: '支払いを報告',
+    message: '参加費を払ったら「支払い済み」をタップ。主催者が確認してくれます。',
+    role: 'participant',
+  },
+  // 主催者向け - チーム機能
+  organizer_team_setup: {
+    title: 'チーム分けをしよう',
+    message: 'チーム数を選んで「ランダム」か「スキル均等」で自動振り分け。参加予定者・来ている人から選べます。',
+    role: 'organizer',
+  },
+  organizer_team_edit: {
+    title: 'チームを編集',
+    message: 'チーム名の変更やメンバーの移動ができます。後から追加された人も簡単に振り分けられます。',
+    role: 'organizer',
+  },
+  // 主催者向け - 対戦表機能
+  organizer_match_create: {
+    title: '対戦表を作成',
+    message: '総当たり戦やトーナメントなど形式を選んで対戦表を作成。途中でチームが増えても新しい対戦表を追加できます。',
+    role: 'organizer',
+  },
+  organizer_match_score: {
+    title: 'スコアを記録',
+    message: '「スコア入力」をタップして試合結果を記録。順位表が自動で更新されます。',
+    role: 'organizer',
   },
 };
 

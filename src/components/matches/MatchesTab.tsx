@@ -27,7 +27,7 @@ import { useMatchStore } from '../../stores/matchStore';
 import { useTeamStore } from '../../stores/teamStore';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
-import { Card, Badge, Button } from '../common';
+import { Card, Badge, Button, ContextHint } from '../common';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { TournamentFormat, CompetitionType } from '../../types';
 import { showAlert, confirmAlert } from '../../utils/alert';
@@ -228,6 +228,15 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
           />
         }
       >
+        {/* 主催者向けヒント：対戦表作成 */}
+        {isOrganizer && (
+          <ContextHint
+            tooltipId="organizer_match_create"
+            show={isOrganizer}
+            delay={600}
+          />
+        )}
+
         {isOrganizer ? (
           <Card variant="elevated" style={styles.emptyCard}>
             <View style={styles.emptyIconContainer}>
@@ -479,6 +488,15 @@ export const MatchesTab: React.FC<MatchesTabProps> = ({ eventId }) => {
         />
       }
     >
+      {/* 主催者向けヒント：スコア記録 */}
+      {isOrganizer && tournament?.settings?.enable_score_tracking && (
+        <ContextHint
+          tooltipId="organizer_match_score"
+          show={isOrganizer && matches.length > 0}
+          delay={800}
+        />
+      )}
+
       {/* Tournament Selector (if multiple tournaments exist) */}
       {tournaments.length > 1 && (
         <Card variant="elevated" style={styles.tournamentSelectorCard}>

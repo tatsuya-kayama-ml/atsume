@@ -4,7 +4,7 @@ import { NavigationContainer, NavigationContainerRef } from '@react-navigation/n
 import { createNativeStackNavigator, NativeStackNavigationOptions } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
 import { AuthNavigator } from './AuthNavigator';
-import { MainNavigator } from './MainNavigator';
+import { MainNavigatorWithTimer } from './MainNavigator';
 import { EventCreateScreen, EventDetailScreen, EventEditScreen, JoinEventScreen } from '../screens/events';
 import { TermsOfServiceScreen, PrivacyPolicyScreen, ProfileEditScreen, ChangePasswordScreen, ContactScreen, NotificationSettingsScreen, FAQScreen } from '../screens/settings';
 import { ResetPasswordScreen } from '../screens/auth';
@@ -96,7 +96,7 @@ export const RootNavigator: React.FC = () => {
             />
           ) : (
           <>
-            <Stack.Screen name="Main" component={MainNavigator} />
+            <Stack.Screen name="Main" component={MainNavigatorWithTimer} />
             <Stack.Screen
               name="EventCreate"
               component={EventCreateScreen}

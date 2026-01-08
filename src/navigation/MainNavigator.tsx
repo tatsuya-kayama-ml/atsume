@@ -1,11 +1,12 @@
 import React from 'react';
-import { Platform } from 'react-native';
+import { View, Platform, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, Bell, Settings } from 'lucide-react-native';
 import { HomeScreen } from '../screens/events/HomeScreen';
 import { NotificationsScreen } from '../screens/settings/NotificationsScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
+import { GlobalTimerBar } from '../components/timer';
 import { MainTabParamList } from '../types';
 import { colors, typography } from '../constants/theme';
 
@@ -79,3 +80,23 @@ export const MainNavigator: React.FC = () => {
     </Tab.Navigator>
   );
 };
+
+// Wrapper component that includes GlobalTimerBar
+export const MainNavigatorWithTimer: React.FC = () => {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Platform.OS === 'web' ? 12 : Math.max(insets.bottom, 12);
+  const tabBarHeight = 72 + bottomPadding;
+
+  return (
+    <View style={styles.container}>
+      <MainNavigator />
+      <GlobalTimerBar bottomOffset={tabBarHeight} />
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});

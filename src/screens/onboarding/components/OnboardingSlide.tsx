@@ -6,9 +6,11 @@ import {
   PlusCircle,
   Users,
   Trophy,
+  Ticket,
+  ClipboardList,
   LucideIcon,
 } from 'lucide-react-native';
-import { colors, typography, spacing } from '../../../constants/theme';
+import { colors, typography, spacing, borderRadius } from '../../../constants/theme';
 
 const { width } = Dimensions.get('window');
 
@@ -18,6 +20,8 @@ const ICONS: Record<string, LucideIcon> = {
   'plus-circle': PlusCircle,
   users: Users,
   trophy: Trophy,
+  ticket: Ticket,
+  'clipboard-list': ClipboardList,
 };
 
 interface OnboardingSlideProps {
@@ -25,6 +29,7 @@ interface OnboardingSlideProps {
   title: string;
   description: string;
   backgroundColor: string;
+  badge?: string;
 }
 
 export const OnboardingSlide: React.FC<OnboardingSlideProps> = ({
@@ -32,11 +37,34 @@ export const OnboardingSlide: React.FC<OnboardingSlideProps> = ({
   title,
   description,
   backgroundColor,
+  badge,
 }) => {
   const IconComponent = ICONS[icon] || CalendarCheck;
 
+  // バッジの色を決定
+  const getBadgeStyle = () => {
+    if (badge === '参加者向け') {
+      return { backgroundColor: colors.success, color: colors.white };
+    }
+    if (badge === '主催者向け') {
+      return { backgroundColor: colors.primary, color: colors.white };
+    }
+    return { backgroundColor: colors.gray[200], color: colors.gray[700] };
+  };
+
+  const badgeStyle = getBadgeStyle();
+
   return (
     <View style={styles.container}>
+      {badge && (
+        <Animated.View
+          entering={FadeInDown.delay(50).duration(400)}
+          style={[styles.badge, { backgroundColor: badgeStyle.backgroundColor }]}
+        >
+          <Text style={[styles.badgeText, { color: badgeStyle.color }]}>{badge}</Text>
+        </Animated.View>
+      )}
+
       <Animated.View
         entering={FadeInUp.delay(100).duration(600)}
         style={[styles.iconContainer, { backgroundColor }]}
@@ -62,10 +90,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
   },
+  badge: {
+    position: 'absolute',
+    top: 60,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+  },
+  badgeText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+  },
   iconContainer: {
-    width: width * 0.5,
-    height: width * 0.5,
-    borderRadius: width * 0.25,
+    width: width * 0.45,
+    height: width * 0.45,
+    borderRadius: width * 0.225,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing['2xl'],

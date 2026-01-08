@@ -27,7 +27,7 @@ import {
 import { useTeamStore } from '../../stores/teamStore';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
-import { Card, Badge, Avatar, Button } from '../common';
+import { Card, Badge, Avatar, Button, ContextHint } from '../common';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { showAlert, confirmAlert } from '../../utils/alert';
 
@@ -235,6 +235,15 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
           />
         }
       >
+        {/* 主催者向けヒント：チーム分けセットアップ */}
+        {isOrganizer && (
+          <ContextHint
+            tooltipId="organizer_team_setup"
+            show={isOrganizer && teams.length === 0}
+            delay={600}
+          />
+        )}
+
         {isOrganizer ? (
           <Card variant="elevated" style={styles.emptyCard}>
             <View style={styles.emptyIconContainer}>
@@ -354,6 +363,15 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
         />
       }
     >
+      {/* 主催者向けヒント：チーム編集 */}
+      {isOrganizer && (
+        <ContextHint
+          tooltipId="organizer_team_edit"
+          show={isOrganizer && teams.length > 0}
+          delay={800}
+        />
+      )}
+
       {/* Organizer Controls */}
       {isOrganizer && (
         <Card variant="elevated" style={styles.controlCard}>
