@@ -44,6 +44,7 @@ export type RootStackParamList = {
   FAQ: undefined;
   Contact: undefined;
   NotificationSettings: undefined;
+  EmailSettings: undefined;
 };
 
 export type AuthStackParamList = {

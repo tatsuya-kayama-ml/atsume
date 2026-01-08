@@ -36,6 +36,7 @@ interface AuthState {
   updatePassword: (newPassword: string) => Promise<void>;
   updateProfile: (data: Partial<Pick<User, 'display_name' | 'skill_level'>>) => Promise<void>;
   updateAvatar: (imageUri: string) => Promise<void>;
+  updateEmail: (newEmail: string) => Promise<void>;
   deleteAccount: () => Promise<void>;
   clearError: () => void;
   clearPasswordRecovery: () => void;
@@ -312,6 +313,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user: null,
         session: null,
       });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  updateEmail: async (newEmail: string) => {
+    try {
+      const { user } = get();
+      if (!user) throw new Error('ユーザーがログインしていません');
+
+      set({ isLoading: true, error: null });
+
+      const { error } = await supabase.auth.updateUser({
+        email: newEmail,
+      });
+
+      if (error) throw error;
+
+      set({ isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;
