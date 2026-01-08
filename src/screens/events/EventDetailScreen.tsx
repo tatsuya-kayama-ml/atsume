@@ -2052,29 +2052,6 @@ const statsStyles = StyleSheet.create({
     fontWeight: '600',
     color: colors.gray[900],
   },
-  paymentOverview: {
-    flexDirection: 'row',
-    marginBottom: spacing.md,
-  },
-  paymentItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  paymentLabel: {
-    fontSize: typography.fontSize.xs,
-    color: colors.gray[500],
-    marginBottom: spacing.xs,
-  },
-  paymentValue: {
-    fontSize: typography.fontSize.xl,
-    fontWeight: '700',
-    color: colors.gray[900],
-  },
-  paymentDivider: {
-    width: 1,
-    backgroundColor: colors.gray[200],
-    marginHorizontal: spacing.md,
-  },
   collectionProgress: {
     marginBottom: spacing.md,
     paddingTop: spacing.md,
