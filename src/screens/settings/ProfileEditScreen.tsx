@@ -142,11 +142,6 @@ export const ProfileEditScreen: React.FC = () => {
                 />
               )}
             />
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>メールアドレス</Text>
-              <Text style={styles.infoValue}>{user?.email}</Text>
-            </View>
           </View>
         </Animated.View>
 
@@ -229,21 +224,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     padding: spacing.md,
     ...shadows.sm,
-  },
-  infoRow: {
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
-    marginTop: spacing.md,
-  },
-  infoLabel: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[500],
-    marginBottom: spacing.xs,
-  },
-  infoValue: {
-    fontSize: typography.fontSize.base,
-    color: colors.gray[700],
   },
   buttonSection: {
     padding: spacing.lg,

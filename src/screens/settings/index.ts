@@ -3,6 +3,7 @@ export { NotificationsScreen } from './NotificationsScreen';
 export { NotificationSettingsScreen } from './NotificationSettingsScreen';
 export { ProfileEditScreen } from './ProfileEditScreen';
 export { ChangePasswordScreen } from './ChangePasswordScreen';
+export { EmailSettingsScreen } from './EmailSettingsScreen';
 export { FAQScreen } from './FAQScreen';
 export { ContactScreen } from './ContactScreen';
 export { TermsOfServiceScreen } from './TermsOfServiceScreen';

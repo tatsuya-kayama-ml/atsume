@@ -6,7 +6,7 @@ import * as Linking from 'expo-linking';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigatorWithTimer } from './MainNavigator';
 import { EventCreateScreen, EventDetailScreen, EventEditScreen, JoinEventScreen } from '../screens/events';
-import { TermsOfServiceScreen, PrivacyPolicyScreen, ProfileEditScreen, ChangePasswordScreen, ContactScreen, NotificationSettingsScreen, FAQScreen } from '../screens/settings';
+import { TermsOfServiceScreen, PrivacyPolicyScreen, ProfileEditScreen, ChangePasswordScreen, ContactScreen, NotificationSettingsScreen, FAQScreen, EmailSettingsScreen } from '../screens/settings';
 import { ResetPasswordScreen } from '../screens/auth';
 import { OnboardingScreen } from '../screens/onboarding';
 import { useAuthStore } from '../stores/authStore';
@@ -183,6 +183,14 @@ export const RootNavigator: React.FC = () => {
               options={{
                 ...modalScreenOptions,
                 title: '通知設定',
+              }}
+            />
+            <Stack.Screen
+              name="EmailSettings"
+              component={EmailSettingsScreen}
+              options={{
+                ...modalScreenOptions,
+                title: 'メールアドレス',
               }}
             />
           </>

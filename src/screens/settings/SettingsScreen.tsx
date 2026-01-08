@@ -40,7 +40,6 @@ export const SettingsScreen: React.FC = () => {
 
   // ユーザー情報の安全な取得
   const displayName = user?.display_name || '名前未設定';
-  const email = user?.email || '';
   const initial = displayName.charAt(0) || '?';
   const avatarUrl = user?.avatar_url;
 
@@ -159,7 +158,6 @@ export const SettingsScreen: React.FC = () => {
           </View>
         </TouchableOpacity>
         <Text style={styles.displayName}>{displayName}</Text>
-        <Text style={styles.email}>{email}</Text>
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(150).springify()} style={styles.section}>
@@ -286,6 +284,16 @@ export const SettingsScreen: React.FC = () => {
         <View style={styles.menuCard}>
           <TouchableOpacity
             style={styles.menuItem}
+            onPress={() => navigation.navigate('EmailSettings')}
+          >
+            <Text style={styles.menuLabel}>メールアドレス</Text>
+            <Text style={styles.menuArrow}>›</Text>
+          </TouchableOpacity>
+
+          <View style={styles.menuDivider} />
+
+          <TouchableOpacity
+            style={styles.menuItem}
             onPress={() => navigation.navigate('ChangePassword')}
           >
             <Text style={styles.menuLabel}>パスワード変更</Text>
@@ -369,11 +377,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xl,
     fontWeight: '600',
     color: colors.gray[900],
-    marginBottom: spacing.xs,
-  },
-  email: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[500],
   },
   section: {
     marginTop: spacing.lg,
