@@ -987,7 +987,7 @@ const ParticipantCard: React.FC<{
 
 // Payment Tab
 const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
-  const { participants, currentEvent, fetchParticipants, fetchEventById, updateEvent, reportPayment, confirmPayment, updatePaymentStatus, isLoading } = useEventStore();
+  const { participants, currentEvent, fetchParticipants, updateEvent, reportPayment, confirmPayment, updatePaymentStatus, isLoading } = useEventStore();
   const { user } = useAuthStore();
   const { showToast } = useToast();
 
@@ -1111,7 +1111,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
           payment_details: paymentDetailsInput.trim() || null,
         });
       }
-      await fetchEventById(eventId);
+      // updateEventが成功した場合、ローカルステートはすでに更新されている
       setShowPaymentLinkModal(false);
       showToast('支払い情報を保存しました', 'success');
     } catch (error: any) {
@@ -1138,7 +1138,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                 payment_link_label: null,
                 payment_details: null,
               });
-              await fetchEventById(eventId);
+              // updateEventが成功した場合、ローカルステートはすでに更新されている
               setShowPaymentLinkModal(false);
               showToast('支払い情報を削除しました', 'success');
             } catch (error: any) {
