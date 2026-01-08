@@ -15,8 +15,10 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  Easing,
   FadeIn,
   FadeInDown,
+  interpolateColor,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import {
@@ -24,15 +26,24 @@ import {
   Pause,
   RotateCcw,
   Clock,
-  Plus,
-  Trash2,
+  Square,
   Timer as TimerIcon,
   AlertCircle,
+  Zap,
 } from 'lucide-react-native';
-import { useTimerStore, formatTime, parseTimeInput, TimerPreset } from '../../stores/timerStore';
+import { useTimerStore, formatTime, TimerPreset } from '../../stores/timerStore';
 import { useEventStore } from '../../stores/eventStore';
-import { Card, Button } from '../common';
+import { Card } from '../common';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
+
+// Energetic accent colors for sports/event app (from UI Pro Max)
+const TIMER_COLORS = {
+  primary: colors.primary,
+  accent: '#F97316', // Energetic orange CTA
+  warning: '#FBBF24', // Warm yellow
+  danger: '#EF4444',
+  success: '#22C55E',
+};
 
 interface TimerTabProps {
   eventId: string;
@@ -58,8 +69,8 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Animation values
-  const pulseScale = useSharedValue(1);
-  const timerScale = useSharedValue(1);
+  const progressAnim = useSharedValue(0);
+  const glowOpacity = useSharedValue(0);
 
   // Timer tick effect
   useEffect(() => {
@@ -81,19 +92,19 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
     };
   }, [activeTimer?.isRunning, tick]);
 
-  // Pulse animation when running
+  // Glow animation when running (subtle, not distracting per UX guidelines)
   useEffect(() => {
     if (activeTimer?.isRunning) {
-      pulseScale.value = withRepeat(
+      glowOpacity.value = withRepeat(
         withSequence(
-          withTiming(1.02, { duration: 500 }),
-          withTiming(1, { duration: 500 })
+          withTiming(0.6, { duration: 800, easing: Easing.out(Easing.ease) }),
+          withTiming(0.3, { duration: 800, easing: Easing.in(Easing.ease) })
         ),
         -1,
         true
       );
     } else {
-      pulseScale.value = withSpring(1);
+      glowOpacity.value = withTiming(0, { duration: 300 });
     }
   }, [activeTimer?.isRunning]);
 
@@ -101,8 +112,8 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
   const isAlmostDone = activeTimer && activeTimer.remainingTime <= 30 && activeTimer.remainingTime > 0;
   const isDone = activeTimer && activeTimer.remainingTime === 0;
 
-  const pulseAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulseScale.value }],
+  const glowAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: glowOpacity.value,
   }));
 
   const handlePresetPress = (preset: TimerPreset) => {
@@ -154,7 +165,7 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
 
   const isCurrentEventTimer = activeTimer?.eventId === eventId;
 
-  // Timer display component
+  // Timer display component with Vibrant & Block-based design
   const renderTimerDisplay = () => {
     if (!activeTimer) return null;
 
@@ -162,91 +173,185 @@ export const TimerTab: React.FC<TimerTabProps> = ({ eventId }) => {
     const progress = activeTimer.duration > 0
       ? (activeTimer.duration - activeTimer.remainingTime) / activeTimer.duration
       : 0;
+    const remainingProgress = 1 - progress;
+
+    // Split time for block-style display
+    const [minutes, seconds] = timeString.split(':');
 
     return (
       <Animated.View
-        style={[styles.timerDisplayContainer, pulseAnimatedStyle]}
+        style={styles.timerDisplayContainer}
         entering={FadeIn.duration(300)}
       >
-        <Card
-          variant="elevated"
-          style={{
-            ...styles.timerCard,
-            ...(isDone ? styles.timerCardDone : {}),
-            ...(isAlmostDone ? styles.timerCardWarning : {}),
-          }}
+        {/* Glow effect behind the card (subtle per UX guidelines) */}
+        {activeTimer.isRunning && (
+          <Animated.View
+            style={[
+              styles.glowEffect,
+              glowAnimatedStyle,
+              isAlmostDone && styles.glowEffectWarning,
+            ]}
+          />
+        )}
+
+        <View
+          style={[
+            styles.timerCard,
+            isDone && styles.timerCardDone,
+            isAlmostDone && styles.timerCardWarning,
+          ]}
         >
-          {/* Progress bar */}
-          <View style={styles.progressBarContainer}>
+          {/* Circular progress indicator */}
+          <View style={styles.circularProgressContainer}>
+            <View style={styles.circularProgressBg}>
+              <View
+                style={[
+                  styles.circularProgressFill,
+                  {
+                    backgroundColor: isDone
+                      ? TIMER_COLORS.danger
+                      : isAlmostDone
+                      ? TIMER_COLORS.warning
+                      : TIMER_COLORS.accent,
+                  },
+                ]}
+              >
+                {/* Time display - Block style */}
+                <View style={styles.timeBlocksContainer}>
+                  <View style={styles.timeBlock}>
+                    <Text
+                      style={[
+                        styles.timeBlockNumber,
+                        isDone && styles.timeBlockNumberDone,
+                        isAlmostDone && styles.timeBlockNumberWarning,
+                      ]}
+                    >
+                      {minutes}
+                    </Text>
+                    <Text style={styles.timeBlockLabel}>分</Text>
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.timeSeparator,
+                      isDone && styles.timeSeparatorDone,
+                    ]}
+                  >
+                    :
+                  </Text>
+
+                  <View style={styles.timeBlock}>
+                    <Text
+                      style={[
+                        styles.timeBlockNumber,
+                        isDone && styles.timeBlockNumberDone,
+                        isAlmostDone && styles.timeBlockNumberWarning,
+                      ]}
+                    >
+                      {seconds}
+                    </Text>
+                    <Text style={styles.timeBlockLabel}>秒</Text>
+                  </View>
+                </View>
+
+                {/* Status indicator */}
+                <View style={styles.statusRow}>
+                  {isDone ? (
+                    <>
+                      <AlertCircle size={16} color={TIMER_COLORS.danger} />
+                      <Text style={styles.statusTextDone}>タイムアップ!</Text>
+                    </>
+                  ) : activeTimer.isRunning ? (
+                    <>
+                      <Zap size={14} color={TIMER_COLORS.accent} />
+                      <Text style={styles.statusTextRunning}>計測中</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.statusTextPaused}>一時停止</Text>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            {/* Progress ring */}
+            <View style={styles.progressRingContainer}>
+              <View
+                style={[
+                  styles.progressRing,
+                  {
+                    borderColor: isDone
+                      ? TIMER_COLORS.danger
+                      : isAlmostDone
+                      ? TIMER_COLORS.warning
+                      : TIMER_COLORS.accent,
+                    borderLeftColor: 'transparent',
+                    borderBottomColor: 'transparent',
+                    transform: [{ rotate: `${progress * 360}deg` }],
+                  },
+                ]}
+              />
+            </View>
+          </View>
+
+          {/* Event name badge */}
+          <View style={styles.eventBadge}>
+            <Text style={styles.eventBadgeText} numberOfLines={1}>
+              {activeTimer.eventName}
+            </Text>
+          </View>
+
+          {/* Linear progress bar */}
+          <View style={styles.linearProgressContainer}>
             <View
               style={[
-                styles.progressBar,
-                { width: `${progress * 100}%` },
-                isDone && styles.progressBarDone,
-                isAlmostDone && styles.progressBarWarning,
+                styles.linearProgress,
+                { width: `${remainingProgress * 100}%` },
+                isDone && styles.linearProgressDone,
+                isAlmostDone && styles.linearProgressWarning,
               ]}
             />
-          </View>
-
-          {/* Event name */}
-          <Text style={styles.timerEventName} numberOfLines={1}>
-            {activeTimer.eventName}
-          </Text>
-
-          {/* Time display */}
-          <View style={styles.timeDisplayRow}>
-            <Text
-              style={[
-                styles.timeText,
-                isDone && styles.timeTextDone,
-                isAlmostDone && styles.timeTextWarning,
-              ]}
-            >
-              {timeString}
+            <Text style={styles.progressPercentText}>
+              {Math.round(remainingProgress * 100)}%
             </Text>
-            {isDone && (
-              <View style={styles.doneIndicator}>
-                <AlertCircle size={24} color={colors.error} />
-                <Text style={styles.doneText}>終了!</Text>
-              </View>
-            )}
           </View>
 
-          {/* Control buttons */}
+          {/* Control buttons - Block style with energetic colors */}
           <View style={styles.controlButtons}>
             <TouchableOpacity
-              style={[styles.controlButton, styles.controlButtonSecondary]}
+              style={styles.controlButtonSecondary}
               onPress={handleReset}
               activeOpacity={0.7}
             >
-              <RotateCcw size={20} color={colors.gray[600]} />
+              <RotateCcw size={22} color={colors.gray[600]} />
+              <Text style={styles.controlButtonLabel}>リセット</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
-                styles.controlButton,
                 styles.controlButtonPrimary,
                 activeTimer.isRunning && styles.controlButtonPause,
+                isDone && styles.controlButtonResume,
               ]}
               onPress={handlePlayPause}
               activeOpacity={0.7}
             >
               {activeTimer.isRunning ? (
-                <Pause size={28} color={colors.white} />
+                <Pause size={32} color={colors.white} />
               ) : (
-                <Play size={28} color={colors.white} />
+                <Play size={32} color={colors.white} style={{ marginLeft: 4 }} />
               )}
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.controlButton, styles.controlButtonDanger]}
+              style={styles.controlButtonDanger}
               onPress={handleStop}
               activeOpacity={0.7}
             >
-              <Trash2 size={20} color={colors.error} />
+              <Square size={20} color={TIMER_COLORS.danger} />
+              <Text style={styles.controlButtonLabelDanger}>停止</Text>
             </TouchableOpacity>
           </View>
-        </Card>
+        </View>
       </Animated.View>
     );
   };
@@ -394,106 +499,242 @@ const styles = StyleSheet.create({
     paddingBottom: spacing['3xl'],
   },
 
-  // Timer display
+  // Timer display - Vibrant & Block-based design
   timerDisplayContainer: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
+    position: 'relative',
+  },
+  glowEffect: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    bottom: 20,
+    borderRadius: borderRadius['2xl'],
+    backgroundColor: TIMER_COLORS.accent,
+    ...shadows.lg,
+  },
+  glowEffectWarning: {
+    backgroundColor: TIMER_COLORS.warning,
   },
   timerCard: {
-    padding: spacing.lg,
+    backgroundColor: colors.white,
+    borderRadius: borderRadius['2xl'],
+    padding: spacing.xl,
     alignItems: 'center',
+    ...shadows.lg,
+    borderWidth: 3,
+    borderColor: 'transparent',
   },
   timerCardWarning: {
-    borderWidth: 2,
-    borderColor: colors.warning,
+    borderColor: TIMER_COLORS.warning,
   },
   timerCardDone: {
-    borderWidth: 2,
-    borderColor: colors.error,
-    backgroundColor: colors.error + '10',
+    borderColor: TIMER_COLORS.danger,
+    backgroundColor: '#FEF2F2',
   },
-  progressBarContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 4,
+
+  // Circular progress
+  circularProgressContainer: {
+    width: 200,
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  circularProgressBg: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
     backgroundColor: colors.gray[100],
-    borderTopLeftRadius: borderRadius.lg,
-    borderTopRightRadius: borderRadius.lg,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: colors.primary,
-  },
-  progressBarWarning: {
-    backgroundColor: colors.warning,
-  },
-  progressBarDone: {
-    backgroundColor: colors.error,
-  },
-  timerEventName: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[500],
-    marginBottom: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  timeDisplayRow: {
-    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: spacing.md,
+    borderWidth: 6,
+    borderColor: colors.gray[200],
   },
-  timeText: {
-    fontSize: 56,
-    fontWeight: '700',
-    color: colors.gray[900],
-    fontVariant: ['tabular-nums'],
-    letterSpacing: -2,
-  },
-  timeTextWarning: {
-    color: colors.warning,
-  },
-  timeTextDone: {
-    color: colors.error,
-  },
-  doneIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  doneText: {
-    fontSize: typography.fontSize.lg,
-    fontWeight: '700',
-    color: colors.error,
-  },
-  controlButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-    marginTop: spacing.lg,
-  },
-  controlButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  circularProgressFill: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  progressRingContainer: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+  },
+  progressRing: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 100,
+    borderWidth: 8,
+    position: 'absolute',
+  },
+
+  // Time blocks - Block style typography
+  timeBlocksContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  timeBlock: {
+    alignItems: 'center',
+  },
+  timeBlockNumber: {
+    fontSize: 44,
+    fontWeight: '800',
+    color: colors.white,
+    fontVariant: ['tabular-nums'],
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  timeBlockNumberWarning: {
+    color: colors.gray[900],
+  },
+  timeBlockNumberDone: {
+    color: colors.gray[900],
+  },
+  timeBlockLabel: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: -4,
+  },
+  timeSeparator: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: colors.white,
+    marginBottom: spacing.sm,
+  },
+  timeSeparatorDone: {
+    color: colors.gray[900],
+  },
+
+  // Status row
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+  },
+  statusTextRunning: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '700',
+    color: colors.white,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  statusTextPaused: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  statusTextDone: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '700',
+    color: TIMER_COLORS.danger,
+  },
+
+  // Event badge
+  eventBadge: {
+    backgroundColor: colors.gray[100],
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    marginBottom: spacing.md,
+  },
+  eventBadgeText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[700],
+  },
+
+  // Linear progress
+  linearProgressContainer: {
+    width: '100%',
+    height: 8,
+    backgroundColor: colors.gray[200],
+    borderRadius: borderRadius.full,
+    overflow: 'hidden',
+    marginBottom: spacing.xl,
+    position: 'relative',
+  },
+  linearProgress: {
+    height: '100%',
+    backgroundColor: TIMER_COLORS.accent,
+    borderRadius: borderRadius.full,
+  },
+  linearProgressWarning: {
+    backgroundColor: TIMER_COLORS.warning,
+  },
+  linearProgressDone: {
+    backgroundColor: TIMER_COLORS.danger,
+  },
+  progressPercentText: {
+    position: 'absolute',
+    right: 0,
+    top: 12,
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.gray[500],
+  },
+
+  // Control buttons - Block style
+  controlButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xl,
+    width: '100%',
+  },
   controlButtonPrimary: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.primary,
-    ...shadows.primary,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: TIMER_COLORS.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...shadows.lg,
   },
   controlButtonPause: {
-    backgroundColor: colors.warning,
+    backgroundColor: TIMER_COLORS.warning,
+  },
+  controlButtonResume: {
+    backgroundColor: TIMER_COLORS.success,
   },
   controlButtonSecondary: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     backgroundColor: colors.gray[100],
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   controlButtonDanger: {
-    backgroundColor: colors.error + '15',
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: TIMER_COLORS.danger + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  controlButtonLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.gray[500],
+    marginTop: 2,
+  },
+  controlButtonLabelDanger: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: TIMER_COLORS.danger,
+    marginTop: 2,
   },
 
   // Presets

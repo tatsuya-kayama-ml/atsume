@@ -24,7 +24,7 @@ import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Calendar as CalendarIcon, MapPin, Banknote, Users, Ticket, Plus, ChevronRight, List, CalendarDays, Timer } from 'lucide-react-native';
+import { Calendar as CalendarIcon, MapPin, Banknote, Users, Ticket, Plus, ChevronRight, List, CalendarDays, Zap } from 'lucide-react-native';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -236,7 +236,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           </View>
 
-          {/* Timer button */}
+          {/* Timer button - Energetic style */}
           {!isPast && (
             <TouchableOpacity
               style={[
@@ -252,9 +252,10 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
               }}
               activeOpacity={0.7}
             >
-              <Timer
+              <Zap
                 size={16}
-                color={activeTimer?.eventId === item.id ? colors.primary : colors.gray[400]}
+                color={activeTimer?.eventId === item.id ? '#F97316' : colors.gray[400]}
+                fill={activeTimer?.eventId === item.id ? '#F97316' : 'transparent'}
               />
             </TouchableOpacity>
           )}
@@ -856,12 +857,16 @@ const styles = StyleSheet.create({
   timerButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: colors.gray[50],
+    marginRight: spacing.xs,
   },
   timerButtonActive: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: borderRadius.md,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1.5,
+    borderColor: '#F97316',
   },
   emptyState: {
     flex: 1,
