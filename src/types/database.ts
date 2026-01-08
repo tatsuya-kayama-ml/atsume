@@ -67,8 +67,9 @@ export interface Event {
   timer_position: TimerPosition;
   skill_level_settings: SkillLevelSettings | null;
   gender_settings: GenderSettings | null;
-  payment_link: string | null; // 支払いリンク（PayPay、銀行振込等）
+  payment_link: string | null; // 支払いリンク（PayPay等のURL）
   payment_link_label: string | null; // 支払いリンクのラベル（例: "PayPay", "銀行振込"）
+  payment_details: string | null; // 支払い詳細情報（銀行口座情報など）
   created_at: string;
   updated_at: string;
 }
