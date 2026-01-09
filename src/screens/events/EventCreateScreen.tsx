@@ -50,9 +50,9 @@ const eventSchema = z.object({
   name: z
     .string()
     .min(1, 'イベント名を入力してください')
-    .max(100, 'イベント名は100文字以内で入力してください'),
-  description: z.string().max(1000, '説明は1000文字以内で入力してください').optional(),
-  location: z.string().min(1, '場所を入力してください'),
+    .max(20, 'イベント名は20文字以内で入力してください'),
+  description: z.string().max(200, '説明は200文字以内で入力してください').optional(),
+  location: z.string().min(1, '場所を入力してください').max(30, '場所は30文字以内で入力してください'),
   fee: z
     .string()
     .optional()
@@ -70,10 +70,28 @@ interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList, 'EventCreate'>;
 }
 
+// 時間を30分単位に丸める関数
+const roundTo30Minutes = (date: Date): Date => {
+  const rounded = new Date(date);
+  const minutes = rounded.getMinutes();
+  // 30分単位に切り上げ
+  if (minutes === 0 || minutes === 30) {
+    // そのまま
+  } else if (minutes < 30) {
+    rounded.setMinutes(30);
+  } else {
+    rounded.setMinutes(0);
+    rounded.setHours(rounded.getHours() + 1);
+  }
+  rounded.setSeconds(0);
+  rounded.setMilliseconds(0);
+  return rounded;
+};
+
 export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
-  const { createEvent, events, fetchEvents } = useEventStore();
+  const { createEvent, events, fetchMyEvents } = useEventStore();
   const { showToast } = useToast();
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(() => roundTo30Minutes(new Date()));
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
@@ -94,7 +112,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
   // 過去イベント一覧を取得（初回のみ）
   useEffect(() => {
     if (events.length === 0) {
-      fetchEvents();
+      fetchMyEvents();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

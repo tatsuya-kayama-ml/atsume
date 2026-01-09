@@ -26,7 +26,8 @@ const profileSchema = z.object({
   display_name: z
     .string()
     .min(1, '表示名を入力してください')
-    .max(50, '表示名は50文字以内で入力してください'),
+    .max(10, '表示名は10文字以内で入力してください')
+    .regex(/^[a-zA-Z0-9ぁ-んァ-ヶー一-龯々]+$/, '絵文字や記号は使用できません'),
 });
 
 type ProfileFormData = z.infer<typeof profileSchema>;

@@ -11,6 +11,8 @@ import { ResetPasswordScreen } from '../screens/auth';
 import { OnboardingScreen } from '../screens/onboarding';
 import { useAuthStore } from '../stores/authStore';
 import { useOnboardingStore } from '../stores/onboardingStore';
+import { supabase } from '../services/supabase';
+import { logger } from '../utils';
 import { RootStackParamList } from '../types';
 import { colors } from '../constants/theme';
 
@@ -62,6 +64,62 @@ export const RootNavigator: React.FC = () => {
 
   useEffect(() => {
     initialize();
+  }, []);
+
+  // Handle deep link for password reset
+  useEffect(() => {
+    const handleDeepLink = async (url: string | null) => {
+      if (!url) return;
+
+      logger.log('[Auth] Deep link received:', url);
+
+      // Check if URL contains auth tokens (password reset callback)
+      // Supabase sends tokens in URL fragment: #access_token=...&refresh_token=...&type=recovery
+      if (url.includes('access_token') && url.includes('type=recovery')) {
+        try {
+          // Parse tokens from URL
+          // URL format: atsume://reset-password#access_token=xxx&refresh_token=xxx&type=recovery
+          const hashIndex = url.indexOf('#');
+          if (hashIndex === -1) return;
+
+          const fragment = url.substring(hashIndex + 1);
+          const params = new URLSearchParams(fragment);
+
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+
+          if (accessToken && refreshToken) {
+            logger.log('[Auth] Setting session from password reset link');
+
+            // Set session using tokens from URL
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+
+            if (error) {
+              logger.error('[Auth] Failed to set session from deep link:', error);
+            } else {
+              logger.log('[Auth] Session set successfully from password reset link');
+            }
+          }
+        } catch (error) {
+          logger.error('[Auth] Error handling deep link:', error);
+        }
+      }
+    };
+
+    // Handle initial URL (app opened via deep link)
+    Linking.getInitialURL().then(handleDeepLink);
+
+    // Handle URL changes (app already open)
+    const subscription = Linking.addEventListener('url', (event) => {
+      handleDeepLink(event.url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   if (!isInitialized || isLoading) {

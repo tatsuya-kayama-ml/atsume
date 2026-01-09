@@ -372,15 +372,17 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                   </View>
                 )}
 
-                {/* Actual Attendance */}
-                <View style={styles.infoSection}>
-                  <Text style={styles.sectionTitle}>当日の出席</Text>
-                  <Badge
-                    label={participant.actual_attendance === true ? '出席' : participant.actual_attendance === false ? '欠席' : '未確認'}
-                    color={participant.actual_attendance === true ? 'success' : participant.actual_attendance === false ? 'error' : 'default'}
-                    size="md"
-                  />
-                </View>
+                {/* Actual Attendance - 主催者のみ表示 */}
+                {isOrganizer && (
+                  <View style={styles.infoSection}>
+                    <Text style={styles.sectionTitle}>当日の出席</Text>
+                    <Badge
+                      label={participant.actual_attendance === true ? '出席' : participant.actual_attendance === false ? '欠席' : '未確認'}
+                      color={participant.actual_attendance === true ? 'success' : participant.actual_attendance === false ? 'error' : 'default'}
+                      size="md"
+                    />
+                  </View>
+                )}
 
                 {/* Registered User Info */}
                 {!isManual && participant.user && (

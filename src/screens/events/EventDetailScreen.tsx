@@ -986,15 +986,6 @@ const ParticipantCard: React.FC<{
             </TouchableOpacity>
           </View>
         )}
-        {!checkInMode && actualAttendance !== null && (
-          <View style={styles.actualAttendanceBadge}>
-            <Badge
-              label={actualAttendance ? '実出席' : '実欠席'}
-              color={actualAttendance ? 'success' : 'error'}
-              size="sm"
-            />
-          </View>
-        )}
       </View>
     </CardWrapper>
   );

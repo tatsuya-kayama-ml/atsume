@@ -45,9 +45,9 @@ const eventSchema = z.object({
   name: z
     .string()
     .min(1, 'イベント名を入力してください')
-    .max(100, 'イベント名は100文字以内で入力してください'),
-  description: z.string().max(1000, '説明は1000文字以内で入力してください').optional(),
-  location: z.string().min(1, '場所を入力してください'),
+    .max(20, 'イベント名は20文字以内で入力してください'),
+  description: z.string().max(200, '説明は200文字以内で入力してください').optional(),
+  location: z.string().min(1, '場所を入力してください').max(30, '場所は30文字以内で入力してください'),
   fee: z
     .string()
     .optional()

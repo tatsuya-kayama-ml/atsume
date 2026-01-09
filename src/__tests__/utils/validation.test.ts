@@ -6,7 +6,8 @@ const signUpSchema = z
     displayName: z
       .string()
       .min(1, '表示名を入力してください')
-      .max(50, '表示名は50文字以内で入力してください'),
+      .max(10, '表示名は10文字以内で入力してください')
+      .regex(/^[a-zA-Z0-9ぁ-んァ-ヶー一-龯々]+$/, '絵文字や記号は使用できません'),
     email: z
       .string()
       .min(1, 'メールアドレスを入力してください')
@@ -38,9 +39,9 @@ describe('SignUp Validation Schema', () => {
       }
     });
 
-    it('should reject display name over 50 characters', () => {
+    it('should reject display name over 10 characters', () => {
       const result = signUpSchema.safeParse({
-        displayName: 'a'.repeat(51),
+        displayName: 'a'.repeat(11),
         email: 'test@example.com',
         password: 'password123',
         confirmPassword: 'password123',
@@ -48,7 +49,21 @@ describe('SignUp Validation Schema', () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].message).toBe('表示名は50文字以内で入力してください');
+        expect(result.error.issues[0].message).toBe('表示名は10文字以内で入力してください');
+      }
+    });
+
+    it('should reject display name with emoji or symbols', () => {
+      const result = signUpSchema.safeParse({
+        displayName: '田中太郎🎉',
+        email: 'test@example.com',
+        password: 'password123',
+        confirmPassword: 'password123',
+      });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toBe('絵文字や記号は使用できません');
       }
     });
 
