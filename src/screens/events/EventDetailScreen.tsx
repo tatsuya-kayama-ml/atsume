@@ -1175,6 +1175,16 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   };
 
   const handleSavePaymentLink = async () => {
+    const url = paymentLinkInput.trim();
+
+    // PayPay URL validation
+    if (selectedPaymentType === 'paypay' && url) {
+      if (!url.startsWith('https://pay.paypay.ne.jp/')) {
+        showToast('PayPayの送金リンクURLを入力してください（https://pay.paypay.ne.jp/で始まるURL）', 'error');
+        return;
+      }
+    }
+
     // Determine label based on selected type
     let finalLabel: string | null = null;
     if (selectedPaymentType === 'paypay') {
@@ -1188,7 +1198,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     setIsSavingLink(true);
     try {
       await updateEvent(eventId, {
-        payment_link: paymentLinkInput.trim() || null,
+        payment_link: url || null,
         payment_link_label: finalLabel,
       });
       setShowPaymentLinkModal(false);
