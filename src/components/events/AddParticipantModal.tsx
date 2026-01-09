@@ -74,8 +74,8 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
         Animated.spring(translateY, {
           toValue: 0,
           useNativeDriver: true,
-          tension: 65,
-          friction: 11,
+          tension: 100,
+          friction: 20,
         }),
       ]).start();
     }
@@ -142,7 +142,7 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
             toValue: 0,
             useNativeDriver: true,
             tension: 100,
-            friction: 10,
+            friction: 20,
           }).start();
         }
       },
