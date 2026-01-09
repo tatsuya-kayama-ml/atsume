@@ -18,7 +18,6 @@ import {
   ChevronDown,
   ChevronUp,
   UserMinus,
-  Edit3,
   ArrowRight,
   X,
   Check,
@@ -586,11 +585,13 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
         return (
           <Card key={team.id} variant="elevated" style={styles.teamCard}>
             <View style={styles.teamHeader}>
-              <TouchableOpacity
-                style={styles.teamHeaderLeft}
-                onPress={() => toggleTeamExpanded(team.id)}
-              >
-                <View style={[styles.teamColorIndicator, { backgroundColor: team.color }]} />
+              <View style={styles.teamHeaderLeft}>
+                <TouchableOpacity
+                  style={styles.teamExpandArea}
+                  onPress={() => toggleTeamExpanded(team.id)}
+                >
+                  <View style={[styles.teamColorIndicator, { backgroundColor: team.color }]} />
+                </TouchableOpacity>
                 {isEditing ? (
                   <View style={styles.editNameContainer}>
                     <TextInput
@@ -609,7 +610,16 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                   </View>
                 ) : (
                   <>
-                    <Text style={styles.teamName}>{team.name}</Text>
+                    {isOrganizer ? (
+                      <TouchableOpacity
+                        style={styles.teamNameTouchable}
+                        onPress={() => handleStartEditTeamName(team.id, team.name)}
+                      >
+                        <Text style={styles.teamName}>{team.name}</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <Text style={styles.teamName}>{team.name}</Text>
+                    )}
                     <Badge
                       label={`${team.members.length}人`}
                       color="default"
@@ -617,16 +627,8 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                     />
                   </>
                 )}
-              </TouchableOpacity>
+              </View>
               <View style={styles.teamHeaderRight}>
-                {isOrganizer && !isEditing && (
-                  <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={() => handleStartEditTeamName(team.id, team.name)}
-                  >
-                    <Edit3 size={16} color={colors.gray[400]} />
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity onPress={() => toggleTeamExpanded(team.id)}>
                   {isExpanded ? (
                     <ChevronUp size={20} color={colors.gray[400]} />
@@ -1012,8 +1014,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  editButton: {
+  teamExpandArea: {
     padding: spacing.xs,
+  },
+  teamNameTouchable: {
+    paddingVertical: spacing.xs,
   },
   editNameContainer: {
     flexDirection: 'row',

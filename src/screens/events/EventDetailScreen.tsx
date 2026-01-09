@@ -437,13 +437,15 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const getStatusConfig = (status: AttendanceStatus): { color: 'success' | 'error' | 'warning' | 'default'; label: string; icon: string; colorValue: string } => {
     switch (status) {
       case 'attending':
-        return { color: 'success', label: '出席', icon: '✓', colorValue: colors.success };
+        return { color: 'success', label: '出席予定', icon: '✓', colorValue: colors.success };
       case 'not_attending':
         return { color: 'error', label: '欠席', icon: '✕', colorValue: colors.error };
       case 'maybe':
         return { color: 'warning', label: '未定', icon: '?', colorValue: colors.warning };
+      case 'unconfirmed':
+        return { color: 'default', label: '未確認', icon: '−', colorValue: colors.gray[500] };
       default:
-        return { color: 'default', label: '未回答', icon: '−', colorValue: colors.gray[500] };
+        return { color: 'default', label: '未確認', icon: '−', colorValue: colors.gray[500] };
     }
   };
 
@@ -686,7 +688,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               <View style={styles.attendanceStatsRow}>
                 <View style={[styles.attendanceStatItem, { backgroundColor: colors.successSoft }]}>
                   <Text style={[styles.attendanceStatValue, { color: colors.success }]}>{attendingParticipants.length}</Text>
-                  <Text style={styles.attendanceStatLabel}>出席</Text>
+                  <Text style={styles.attendanceStatLabel}>出席予定</Text>
                 </View>
                 <View style={[styles.attendanceStatItem, { backgroundColor: colors.warningSoft }]}>
                   <Text style={[styles.attendanceStatValue, { color: colors.warning }]}>{maybeParticipants.length}</Text>
@@ -737,7 +739,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               <View style={[styles.summaryIconCircle, { backgroundColor: colors.successSoft }]}>
                 <Text style={[styles.summaryCount, { color: colors.success }]}>{attendingParticipants.length}</Text>
               </View>
-              <Text style={styles.summaryLabel}>出席</Text>
+              <Text style={styles.summaryLabel}>出席予定</Text>
             </View>
             <View style={styles.summaryItem}>
               <View style={[styles.summaryIconCircle, { backgroundColor: colors.warningSoft }]}>
