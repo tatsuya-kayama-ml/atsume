@@ -8,12 +8,12 @@ import {
   RefreshControl,
   TextInput,
   Modal,
+  Switch,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Users,
   Shuffle,
-  Scale,
   Trash2,
   ChevronDown,
   ChevronUp,
@@ -23,8 +23,9 @@ import {
   X,
   Check,
   UserPlus,
+  Settings2,
 } from 'lucide-react-native';
-import { useTeamStore } from '../../stores/teamStore';
+import { useTeamStore, TeamAssignmentOptions } from '../../stores/teamStore';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Card, Badge, Avatar, Button, ContextHint } from '../common';
@@ -63,7 +64,15 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
   // 未割り当てメンバーからチーム選択用state
   const [assigningParticipant, setAssigningParticipant] = useState<{ id: string; name: string } | null>(null);
 
+  // チーム分け条件オプション
+  const [balanceSkill, setBalanceSkill] = useState(false);
+  const [balanceGender, setBalanceGender] = useState(false);
+
   const isOrganizer = currentEvent?.organizer_id === user?.id;
+
+  // イベントの設定を確認
+  const hasSkillSettings = currentEvent?.skill_level_settings?.enabled ?? false;
+  const hasGenderSettings = currentEvent?.gender_settings?.enabled ?? false;
   const attendingParticipants = participants.filter((p) => p.attendance_status === 'attending');
   const checkedInParticipants = participants.filter((p) => p.check_in_status === 'checked_in');
 
@@ -117,7 +126,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
     });
   };
 
-  const handleAutoAssign = async (mode: 'random' | 'balanced') => {
+  const handleAutoAssign = async () => {
     const targetParticipants = assignTarget === 'checked_in' ? checkedInParticipants : attendingParticipants;
     const targetLabel = assignTarget === 'checked_in' ? '来ている参加者' : '参加予定者';
 
@@ -131,15 +140,25 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
       return;
     }
 
+    // 条件の説明を作成
+    const conditions: string[] = [];
+    if (balanceSkill) conditions.push('スキル均等');
+    if (balanceGender) conditions.push('男女均等');
+    const conditionText = conditions.length > 0 ? `（${conditions.join('・')}）` : '（ランダム）';
+
     const confirmMessage = teams.length > 0
-      ? `既存のチーム分けをリセットして、${targetLabel}(${targetParticipants.length}人)で新しく分けますか？`
-      : `${targetLabel}(${targetParticipants.length}人)を${selectedTeamCount}チームに分けますか？`;
+      ? `既存のチーム分けをリセットして、${targetLabel}(${targetParticipants.length}人)で新しく分けますか？\n\n条件: ${conditionText}`
+      : `${targetLabel}(${targetParticipants.length}人)を${selectedTeamCount}チームに分けますか？\n\n条件: ${conditionText}`;
 
     const confirmed = await confirmAlert('チーム分け', confirmMessage, '実行');
     if (!confirmed) return;
 
     try {
-      await autoAssignTeams(eventId, mode, selectedTeamCount, assignTarget);
+      const options: TeamAssignmentOptions = {
+        balanceSkill,
+        balanceGender,
+      };
+      await autoAssignTeams(eventId, selectedTeamCount, assignTarget, options);
       setShowSettings(false);
       // Expand all teams after assignment
       const newExpandedTeams = new Set<string>();
@@ -332,23 +351,47 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
               </View>
             </View>
 
-            <View style={styles.assignButtons}>
-              <Button
-                title="ランダム分け"
-                onPress={() => handleAutoAssign('random')}
-                variant="outline"
-                icon={<Shuffle size={18} color={colors.primary} />}
-                style={styles.assignButton}
-                loading={teamLoading}
-              />
-              <Button
-                title="スキル均等分け"
-                onPress={() => handleAutoAssign('balanced')}
-                icon={<Scale size={18} color={colors.white} />}
-                style={styles.assignButton}
-                loading={teamLoading}
-              />
-            </View>
+            {/* 条件設定 */}
+            {(hasSkillSettings || hasGenderSettings) && (
+              <View style={styles.conditionSection}>
+                <View style={styles.conditionHeader}>
+                  <Settings2 size={16} color={colors.gray[600]} />
+                  <Text style={styles.conditionTitle}>分け方の条件（任意）</Text>
+                </View>
+
+                {hasSkillSettings && (
+                  <View style={styles.conditionRow}>
+                    <Text style={styles.conditionLabel}>スキルレベルを均等にする</Text>
+                    <Switch
+                      value={balanceSkill}
+                      onValueChange={setBalanceSkill}
+                      trackColor={{ false: colors.gray[300], true: colors.primarySoft }}
+                      thumbColor={balanceSkill ? colors.primary : colors.gray[100]}
+                    />
+                  </View>
+                )}
+
+                {hasGenderSettings && (
+                  <View style={styles.conditionRow}>
+                    <Text style={styles.conditionLabel}>男女比を均等にする</Text>
+                    <Switch
+                      value={balanceGender}
+                      onValueChange={setBalanceGender}
+                      trackColor={{ false: colors.gray[300], true: colors.primarySoft }}
+                      thumbColor={balanceGender ? colors.primary : colors.gray[100]}
+                    />
+                  </View>
+                )}
+              </View>
+            )}
+
+            <Button
+              title="チーム分けを実行"
+              onPress={handleAutoAssign}
+              icon={<Shuffle size={18} color={colors.white} />}
+              style={styles.assignButtonFull}
+              loading={teamLoading}
+            />
           </Card>
         ) : (
           <Card variant="elevated" style={styles.emptyCard}>
@@ -467,23 +510,41 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                 </View>
               </View>
 
-              <View style={styles.assignButtons}>
-                <Button
-                  title="ランダム"
-                  onPress={() => handleAutoAssign('random')}
-                  variant="outline"
-                  icon={<Shuffle size={16} color={colors.primary} />}
-                  style={styles.assignButtonSmall}
-                  loading={teamLoading}
-                />
-                <Button
-                  title="スキル均等"
-                  onPress={() => handleAutoAssign('balanced')}
-                  icon={<Scale size={16} color={colors.white} />}
-                  style={styles.assignButtonSmall}
-                  loading={teamLoading}
-                />
-              </View>
+              {/* 条件設定 */}
+              {(hasSkillSettings || hasGenderSettings) && (
+                <View style={styles.conditionSectionCompact}>
+                  {hasSkillSettings && (
+                    <View style={styles.conditionRowCompact}>
+                      <Text style={styles.conditionLabelCompact}>スキル均等</Text>
+                      <Switch
+                        value={balanceSkill}
+                        onValueChange={setBalanceSkill}
+                        trackColor={{ false: colors.gray[300], true: colors.primarySoft }}
+                        thumbColor={balanceSkill ? colors.primary : colors.gray[100]}
+                      />
+                    </View>
+                  )}
+                  {hasGenderSettings && (
+                    <View style={styles.conditionRowCompact}>
+                      <Text style={styles.conditionLabelCompact}>男女均等</Text>
+                      <Switch
+                        value={balanceGender}
+                        onValueChange={setBalanceGender}
+                        trackColor={{ false: colors.gray[300], true: colors.primarySoft }}
+                        thumbColor={balanceGender ? colors.primary : colors.gray[100]}
+                      />
+                    </View>
+                  )}
+                </View>
+              )}
+
+              <Button
+                title="再分け"
+                onPress={handleAutoAssign}
+                icon={<Shuffle size={16} color={colors.white} />}
+                style={styles.reassignButton}
+                loading={teamLoading}
+              />
 
               <TouchableOpacity
                 style={styles.deleteAllButton}
@@ -1169,5 +1230,53 @@ const styles = StyleSheet.create({
   unassignedName: {
     fontSize: typography.fontSize.sm,
     color: colors.gray[700],
+  },
+  // 条件設定
+  conditionSection: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[100],
+  },
+  conditionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  conditionTitle: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '500',
+    color: colors.gray[600],
+  },
+  conditionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+  },
+  conditionLabel: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[700],
+  },
+  conditionSectionCompact: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  conditionRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  conditionLabelCompact: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[600],
+  },
+  assignButtonFull: {
+    marginTop: spacing.md,
+  },
+  reassignButton: {
+    flex: 1,
   },
 });

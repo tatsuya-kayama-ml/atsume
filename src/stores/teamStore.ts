@@ -6,6 +6,12 @@ interface TeamWithMembers extends Team {
   members: (TeamMember & { participant: EventParticipant })[];
 }
 
+// チーム分けオプション
+export interface TeamAssignmentOptions {
+  balanceSkill?: boolean;    // スキルレベルを均等にする
+  balanceGender?: boolean;   // 男女比を均等にする
+}
+
 interface TeamState {
   teams: TeamWithMembers[];
   isLoading: boolean;
@@ -24,7 +30,7 @@ interface TeamState {
   moveMemberToTeam: (memberId: string, newTeamId: string) => Promise<void>;
 
   // Auto assignment
-  autoAssignTeams: (eventId: string, mode: 'random' | 'balanced', teamCount: number, target?: 'attending' | 'checked_in') => Promise<void>;
+  autoAssignTeams: (eventId: string, teamCount: number, target?: 'attending' | 'checked_in', options?: TeamAssignmentOptions) => Promise<void>;
 
   // Clear
   clearTeams: () => void;
@@ -59,7 +65,37 @@ const shuffleArray = <T>(array: T[]): T[] => {
   return shuffled;
 };
 
-// Balanced assignment using snake draft
+// Snake draft helper function
+const snakeDraft = (
+  participants: EventParticipant[],
+  teamCount: number
+): Map<number, EventParticipant[]> => {
+  const teams = new Map<number, EventParticipant[]>();
+  for (let i = 0; i < teamCount; i++) {
+    teams.set(i, []);
+  }
+
+  // Snake draft: 0,1,2,3,3,2,1,0,0,1,2,3...
+  let direction = 1;
+  let currentTeam = 0;
+
+  participants.forEach((participant) => {
+    teams.get(currentTeam)!.push(participant);
+
+    currentTeam += direction;
+    if (currentTeam >= teamCount) {
+      currentTeam = teamCount - 1;
+      direction = -1;
+    } else if (currentTeam < 0) {
+      currentTeam = 0;
+      direction = 1;
+    }
+  });
+
+  return teams;
+};
+
+// Balanced assignment using snake draft (skill-based)
 const balancedAssignment = (
   participants: EventParticipant[],
   teamCount: number
@@ -71,26 +107,66 @@ const balancedAssignment = (
     return skillB - skillA;
   });
 
+  return snakeDraft(sorted, teamCount);
+};
+
+// Gender balanced assignment
+const genderBalancedAssignment = (
+  participants: EventParticipant[],
+  teamCount: number
+): Map<number, EventParticipant[]> => {
+  // Separate by gender
+  const males = shuffleArray(participants.filter(p => p.gender === 'male'));
+  const females = shuffleArray(participants.filter(p => p.gender === 'female'));
+  const others = shuffleArray(participants.filter(p => p.gender !== 'male' && p.gender !== 'female'));
+
   const teams = new Map<number, EventParticipant[]>();
   for (let i = 0; i < teamCount; i++) {
     teams.set(i, []);
   }
 
-  // Snake draft: 0,1,2,3,3,2,1,0,0,1,2,3...
-  let direction = 1;
-  let currentTeam = 0;
+  // Distribute each gender group evenly using round-robin
+  [males, females, others].forEach(group => {
+    group.forEach((participant, index) => {
+      teams.get(index % teamCount)!.push(participant);
+    });
+  });
 
-  sorted.forEach((participant) => {
-    teams.get(currentTeam)!.push(participant);
+  return teams;
+};
 
-    currentTeam += direction;
-    if (currentTeam >= teamCount) {
-      currentTeam = teamCount - 1;
-      direction = -1;
-    } else if (currentTeam < 0) {
-      currentTeam = 0;
-      direction = 1;
-    }
+// Balanced assignment with both skill and gender consideration
+const balancedAssignmentWithGender = (
+  participants: EventParticipant[],
+  teamCount: number
+): Map<number, EventParticipant[]> => {
+  // Separate by gender and sort each group by skill
+  const males = [...participants.filter(p => p.gender === 'male')].sort((a, b) => (b.skill_level ?? 3) - (a.skill_level ?? 3));
+  const females = [...participants.filter(p => p.gender === 'female')].sort((a, b) => (b.skill_level ?? 3) - (a.skill_level ?? 3));
+  const others = [...participants.filter(p => p.gender !== 'male' && p.gender !== 'female')].sort((a, b) => (b.skill_level ?? 3) - (a.skill_level ?? 3));
+
+  const teams = new Map<number, EventParticipant[]>();
+  for (let i = 0; i < teamCount; i++) {
+    teams.set(i, []);
+  }
+
+  // Snake draft for each gender group separately
+  [males, females, others].forEach(group => {
+    let direction = 1;
+    let currentTeam = 0;
+
+    group.forEach((participant) => {
+      teams.get(currentTeam)!.push(participant);
+
+      currentTeam += direction;
+      if (currentTeam >= teamCount) {
+        currentTeam = teamCount - 1;
+        direction = -1;
+      } else if (currentTeam < 0) {
+        currentTeam = 0;
+        direction = 1;
+      }
+    });
   });
 
   return teams;
@@ -313,7 +389,7 @@ export const useTeamStore = create<TeamState>((set, get) => ({
     }
   },
 
-  autoAssignTeams: async (eventId: string, mode: 'random' | 'balanced', teamCount: number, target: 'attending' | 'checked_in' = 'attending') => {
+  autoAssignTeams: async (eventId: string, teamCount: number, target: 'attending' | 'checked_in' = 'attending', options: TeamAssignmentOptions = {}) => {
     set({ isLoading: true, error: null });
     try {
       // First, delete existing teams
@@ -344,10 +420,20 @@ export const useTeamStore = create<TeamState>((set, get) => ({
       // Create teams
       const teams = await get().createTeams(eventId, teamCount);
 
-      // Assign participants to teams
+      // Assign participants to teams based on options
       let assignments: Map<number, EventParticipant[]>;
 
-      if (mode === 'random') {
+      if (options.balanceSkill && options.balanceGender) {
+        // Both skill and gender balance
+        assignments = balancedAssignmentWithGender(participants, teamCount);
+      } else if (options.balanceSkill) {
+        // Skill balance only
+        assignments = balancedAssignment(participants, teamCount);
+      } else if (options.balanceGender) {
+        // Gender balance only
+        assignments = genderBalancedAssignment(participants, teamCount);
+      } else {
+        // Random assignment
         const shuffled = shuffleArray(participants);
         assignments = new Map();
         for (let i = 0; i < teamCount; i++) {
@@ -356,9 +442,6 @@ export const useTeamStore = create<TeamState>((set, get) => ({
         shuffled.forEach((participant, index) => {
           assignments.get(index % teamCount)!.push(participant);
         });
-      } else {
-        // Balanced mode
-        assignments = balancedAssignment(participants, teamCount);
       }
 
       // Insert team members
