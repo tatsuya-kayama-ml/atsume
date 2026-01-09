@@ -1185,8 +1185,9 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
     // PayPay URL validation
     if (selectedPaymentType === 'paypay' && url) {
-      if (!url.startsWith('https://pay.paypay.ne.jp/')) {
-        showToast('PayPayの送金リンクURLを入力してください（https://pay.paypay.ne.jp/で始まるURL）', 'error');
+      const isValidPayPayUrl = url.startsWith('https://pay.paypay.ne.jp/') || url.startsWith('https://qr.paypay.ne.jp/');
+      if (!isValidPayPayUrl) {
+        showToast('PayPayのリンクURLを入力してください', 'error');
         return;
       }
     }
