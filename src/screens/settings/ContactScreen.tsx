@@ -19,8 +19,8 @@ interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Contact'>;
 }
 
-// GoogleフォームのURL（実際のURLに置き換えてください）
-const GOOGLE_FORM_URL = 'https://forms.gle/YOUR_FORM_ID';
+// GoogleフォームのURL
+const GOOGLE_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSdITG7LUgVG-_YAsZAsN3hxf4NkZcP2eTW82fJvoSh7jgUjkw/viewform?usp=header';
 
 export const ContactScreen: React.FC<Props> = ({ navigation }) => {
   const { showToast } = useToast();

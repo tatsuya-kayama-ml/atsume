@@ -71,7 +71,7 @@ interface Props {
 }
 
 export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
-  const { createEvent, events, fetchEvents, isLoading } = useEventStore();
+  const { createEvent, events, fetchEvents } = useEventStore();
   const { showToast } = useToast();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -175,8 +175,17 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
     setShowTimePicker(false);
   };
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const onSubmit = async (data: EventFormData) => {
     logger.log('[EventCreate] onSubmit called');
+
+    if (isSubmitting) {
+      logger.log('[EventCreate] Already submitting, skipping');
+      return;
+    }
+
+    setIsSubmitting(true);
 
     try {
       // スキルレベル設定を構築
@@ -217,6 +226,8 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
     } catch (error: any) {
       logger.error('[EventCreate] Error creating event:', error);
       showToast(error.message || 'イベントの作成に失敗しました', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -679,7 +690,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
           <Button
             title="イベントを作成"
             onPress={handleSubmit(onSubmit)}
-            loading={isLoading}
+            loading={isSubmitting}
             fullWidth
             size="lg"
           />

@@ -1,8 +1,13 @@
 import { create } from 'zustand';
 import { Platform } from 'react-native';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '../services/supabase';
 import { User } from '../types';
 import { logger } from '../utils';
+
+// 画像リサイズのための定数
+const MAX_IMAGE_SIZE = 800; // 最大幅/高さ（ピクセル）
+const IMAGE_QUALITY = 0.8; // 圧縮品質（0-1）
 
 // Get redirect URL based on platform
 const getRedirectUrl = (path: string = ''): string => {
@@ -249,13 +254,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       set({ isLoading: true, error: null });
 
-      // Generate unique file name
-      const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
-      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      // 画像をリサイズ・圧縮
+      logger.log('[Auth] Resizing image...');
+      const resizedImage = await ImageManipulator.manipulateAsync(
+        imageUri,
+        [{ resize: { width: MAX_IMAGE_SIZE, height: MAX_IMAGE_SIZE } }],
+        { compress: IMAGE_QUALITY, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      logger.log('[Auth] Image resized successfully');
+
+      // Generate unique file name (常にJPEGとして保存)
+      const fileName = `${user.id}-${Date.now()}.jpg`;
       const filePath = `avatars/${fileName}`;
 
       // Convert URI to blob for upload
-      const response = await fetch(imageUri);
+      const response = await fetch(resizedImage.uri);
       const blob = await response.blob();
 
       // Upload to Supabase Storage
@@ -264,7 +277,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         .upload(filePath, blob, {
           cacheControl: '3600',
           upsert: true,
-          contentType: `image/${fileExt}`,
+          contentType: 'image/jpeg',
         });
 
       if (uploadError) throw uploadError;
