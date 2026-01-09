@@ -43,7 +43,7 @@ const modalScreenOptions: NativeStackNavigationOptions = {
 
 // Deep linking configuration
 const linking = {
-  prefixes: [Linking.createURL('/'), 'atsume://'],
+  prefixes: [Linking.createURL('/'), 'atsume://', 'https://atsume.vercel.app'],
   config: {
     screens: {
       Auth: {
@@ -51,7 +51,29 @@ const linking = {
           ResetPassword: 'reset-password',
         },
       },
+      Main: 'Main',
+      EventDetail: {
+        path: 'EventDetail/:eventId',
+        screens: {
+          Info: 'Info',
+          Participants: 'Participants',
+          Payment: 'Payment',
+          Teams: 'Teams',
+          Matches: 'Matches',
+          Stats: 'Stats',
+        },
+      },
+      EventCreate: 'EventCreate',
+      EventEdit: 'EventEdit/:eventId',
       JoinEvent: 'event/:code',
+      TermsOfService: 'TermsOfService',
+      PrivacyPolicy: 'PrivacyPolicy',
+      ProfileEdit: 'ProfileEdit',
+      ChangePassword: 'ChangePassword',
+      FAQ: 'FAQ',
+      Contact: 'Contact',
+      NotificationSettings: 'NotificationSettings',
+      EmailSettings: 'EmailSettings',
     },
   },
 };

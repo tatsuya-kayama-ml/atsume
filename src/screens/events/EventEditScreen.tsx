@@ -15,12 +15,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { FileText, Calendar, MapPin, Lock, BarChart3 } from 'lucide-react-native';
+import { FileText, Calendar, MapPin, BarChart3 } from 'lucide-react-native';
 import { Button, Input, Card, DateTimePicker } from '../../components/common';
 import { useEventStore } from '../../stores/eventStore';
 import { colors, spacing, typography, borderRadius } from '../../constants/theme';
 import { RootStackParamList, SkillLevelOption, SkillLevelSettings, GenderOption, GenderSettings } from '../../types';
-import { hashPassword, logger } from '../../utils';
+import { logger } from '../../utils';
 
 const DEFAULT_SKILL_LEVEL_OPTIONS: SkillLevelOption[] = [
   { value: 1, label: '初心者' },
@@ -53,7 +53,6 @@ const eventSchema = z.object({
     .optional()
     .refine((val) => !val || /^\d+$/.test(val), '数値を入力してください'),
   capacity: z.string().regex(/^\d*$/, '数値を入力してください').optional(),
-  password: z.string().optional(),
 });
 
 type EventFormData = z.infer<typeof eventSchema>;
@@ -95,7 +94,6 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
       location: '',
       fee: '0',
       capacity: '',
-      password: '',
     },
   });
 
@@ -111,7 +109,6 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
         location: currentEvent.location,
         fee: currentEvent.fee.toString(),
         capacity: currentEvent.capacity?.toString() || '',
-        password: '',
       });
       setSelectedDate(new Date(currentEvent.date_time));
 

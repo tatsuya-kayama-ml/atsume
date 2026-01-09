@@ -81,6 +81,7 @@ export interface EventParticipant {
   payment_status: PaymentStatus;
   payment_reported_at: string | null;
   payment_confirmed_at: string | null;
+  payment_note: string | null; // 支払い報告時のメモ（例: PayPayで送りました、ユーザー名XXです）
   skill_level: number | null;
   gender: GenderType | null;
   actual_attendance: boolean | null; // 実際の出席状況 (null=未確認, true=出席, false=欠席)

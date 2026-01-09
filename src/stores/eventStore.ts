@@ -30,7 +30,7 @@ interface EventState {
   updateAttendanceStatus: (participantId: string, status: AttendanceStatus) => Promise<void>;
   updatePaymentStatus: (participantId: string, status: PaymentStatus) => Promise<void>;
   updateParticipantProfile: (participantId: string, data: { skill_level?: number; gender?: GenderType }) => Promise<void>;
-  reportPayment: (participantId: string) => Promise<void>;
+  reportPayment: (participantId: string, note?: string) => Promise<void>;
   confirmPayment: (participantId: string) => Promise<void>;
 
   // Actual attendance (check-in)
@@ -575,16 +575,26 @@ export const useEventStore = create<EventState>((set, get) => ({
     }
   },
 
-  reportPayment: async (participantId: string) => {
+  reportPayment: async (participantId: string, note?: string) => {
     try {
       set({ isLoading: true, error: null });
 
+      const updateData: {
+        payment_status: PaymentStatus;
+        payment_reported_at: string;
+        payment_note?: string;
+      } = {
+        payment_status: 'pending_confirmation',
+        payment_reported_at: new Date().toISOString(),
+      };
+
+      if (note !== undefined) {
+        updateData.payment_note = note || null;
+      }
+
       const { error } = await supabase
         .from('event_participants')
-        .update({
-          payment_status: 'pending_confirmation',
-          payment_reported_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', participantId);
 
       if (error) throw error;
@@ -596,6 +606,7 @@ export const useEventStore = create<EventState>((set, get) => ({
                 ...p,
                 payment_status: 'pending_confirmation' as PaymentStatus,
                 payment_reported_at: new Date().toISOString(),
+                payment_note: note || null,
               }
             : p
         ),

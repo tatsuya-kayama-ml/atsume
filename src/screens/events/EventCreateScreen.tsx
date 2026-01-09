@@ -7,7 +7,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  Alert,
   Switch,
   Modal,
   FlatList,
@@ -16,12 +15,12 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { FileText, MapPin, Coins, Lock, BarChart3, Calendar, Clock, Copy, X, ChevronRight } from 'lucide-react-native';
+import { FileText, MapPin, Coins, BarChart3, Calendar, Clock, Copy, X, ChevronRight } from 'lucide-react-native';
 import { Button, Input, Card, DateTimePicker } from '../../components/common';
 import { useEventStore } from '../../stores/eventStore';
 import { useToast } from '../../contexts/ToastContext';
-import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
-import { RootStackParamList, SkillLevelOption, SkillLevelSettings, GenderOption, GenderSettings, GenderType, Event } from '../../types';
+import { colors, spacing, typography, borderRadius } from '../../constants/theme';
+import { RootStackParamList, SkillLevelOption, SkillLevelSettings, GenderOption, GenderSettings, Event } from '../../types';
 import { logger, formatDateTime } from '../../utils';
 
 // デフォルトのスキルレベルオプション（3段階）
@@ -61,7 +60,6 @@ const eventSchema = z.object({
     .string()
     .optional()
     .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0), '有効な人数を入力してください'),
-  password: z.string().optional(),
 });
 
 type EventFormData = z.infer<typeof eventSchema>;
@@ -130,7 +128,6 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
       location: '',
       fee: '',
       capacity: '',
-      password: '',
     },
   });
 
@@ -141,7 +138,6 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
     setValue('location', event.location);
     setValue('fee', event.fee?.toString() || '');
     setValue('capacity', event.capacity?.toString() || '');
-    setValue('password', event.password || '');
 
     // スキルレベル設定をコピー
     if (event.skill_level_settings?.enabled) {
@@ -230,7 +226,6 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
         location: data.location,
         fee: data.fee ? Number(data.fee) : 0,
         capacity: data.capacity ? Number(data.capacity) : undefined,
-        password: data.password || undefined,
         skill_level_settings: skillSettings,
         gender_settings: genderSettingsData,
       };
@@ -417,30 +412,6 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
               />
             </View>
           </View>
-        </Card>
-
-        {/* Section: Security */}
-        <Card variant="default" style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Lock size={18} color={colors.primary} style={styles.sectionIconStyle} />
-            <Text style={styles.sectionTitle}>セキュリティ</Text>
-          </View>
-
-          <Controller
-            control={control}
-            name="password"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <Input
-                label="参加パスワード（任意）"
-                placeholder="設定しない場合は空欄"
-                value={value}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                hint="パスワードを設定すると、参加時に入力が必要になります"
-                variant="filled"
-              />
-            )}
-          />
         </Card>
 
         {/* Section: Skill Level Option */}

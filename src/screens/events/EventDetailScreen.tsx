@@ -51,7 +51,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { useTimerStore, formatTime } from '../../stores/timerStore';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Card, Badge, Avatar, ContextHint } from '../../components/common';
-import { ReminderModal, AddParticipantModal, ParticipantDetailModal } from '../../components/events';
+import { ReminderModal, AddParticipantModal, ParticipantDetailModal, PaymentReportModal } from '../../components/events';
 import { TeamsTab } from '../../components/teams';
 import { MatchesTab } from '../../components/matches';
 import { TimerTab } from '../../components/timer';
@@ -1006,6 +1006,9 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const [customLabelInput, setCustomLabelInput] = useState('');
   const [isSavingLink, setIsSavingLink] = useState(false);
 
+  // Payment report modal state
+  const [showPaymentReportModal, setShowPaymentReportModal] = useState(false);
+
   // Payment type options
   const PAYMENT_TYPE_OPTIONS = [
     { key: 'paypay' as const, label: 'PayPay', icon: '💰' },
@@ -1111,12 +1114,17 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
   const progressPercentage = totalExpected > 0 ? (totalCollected / totalExpected) * 100 : 0;
 
-  const handleReportPayment = async () => {
+  const handleOpenPaymentReportModal = () => {
+    setShowPaymentReportModal(true);
+  };
+
+  const handleSubmitPaymentReport = async (note: string) => {
     if (!myParticipation) return;
     try {
-      await reportPayment(myParticipation.id);
+      await reportPayment(myParticipation.id, note);
     } catch (error: any) {
       Alert.alert('エラー', error.message);
+      throw error;
     }
   };
 
@@ -1432,13 +1440,22 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
           ) : (
             <Button
               title="送金を報告する"
-              onPress={handleReportPayment}
+              onPress={handleOpenPaymentReportModal}
               fullWidth
               size="lg"
             />
           )}
         </Card>
       )}
+
+      {/* Payment Report Modal */}
+      <PaymentReportModal
+        visible={showPaymentReportModal}
+        onClose={() => setShowPaymentReportModal(false)}
+        onSubmit={handleSubmitPaymentReport}
+        paymentAmount={currentEvent?.fee || 0}
+        paymentMethod={currentEvent?.payment_link_label}
+      />
 
       {/* Payment Link Modal - Bottom Sheet Style */}
       <Modal
@@ -1608,32 +1625,40 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
             const avatarUrl = participant.user?.avatar_url;
             return (
-              <View key={participant.id} style={styles.paymentItem}>
-                <View style={styles.paymentItemLeft}>
-                  <Avatar
-                    name={displayName}
-                    imageUrl={avatarUrl || undefined}
-                    size="md"
-                  />
-                  <View style={styles.paymentItemInfo}>
-                    <Text style={styles.paymentItemName}>
-                      {displayName}
-                    </Text>
-                    <View style={styles.paymentItemBadges}>
-                      <Badge label="確認待ち" color="warning" size="sm" variant="soft" />
-                      {participant.is_manual && (
-                        <Badge label="手動" color="default" size="sm" variant="soft" />
-                      )}
+              <View key={participant.id} style={styles.paymentItemContainer}>
+                <View style={styles.paymentItemInContainer}>
+                  <View style={styles.paymentItemLeft}>
+                    <Avatar
+                      name={displayName}
+                      imageUrl={avatarUrl || undefined}
+                      size="md"
+                    />
+                    <View style={styles.paymentItemInfo}>
+                      <Text style={styles.paymentItemName}>
+                        {displayName}
+                      </Text>
+                      <View style={styles.paymentItemBadges}>
+                        <Badge label="確認待ち" color="warning" size="sm" variant="soft" />
+                        {participant.is_manual && (
+                          <Badge label="手動" color="default" size="sm" variant="soft" />
+                        )}
+                      </View>
                     </View>
                   </View>
+                  <TouchableOpacity
+                    style={styles.confirmPaymentButton}
+                    onPress={() => handleConfirmPayment(participant.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.confirmPaymentButtonText}>承認</Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.confirmPaymentButton}
-                  onPress={() => handleConfirmPayment(participant.id)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.confirmPaymentButtonText}>承認</Text>
-                </TouchableOpacity>
+                {participant.payment_note && (
+                  <View style={styles.paymentNoteContainer}>
+                    <Text style={styles.paymentNoteLabel}>メモ:</Text>
+                    <Text style={styles.paymentNoteText}>{participant.payment_note}</Text>
+                  </View>
+                )}
               </View>
             );
           })}
@@ -2701,6 +2726,13 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.gray[500],
   },
+  paymentItemContainer: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.sm,
+    ...shadows.xs,
+    overflow: 'hidden',
+  },
   paymentItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2710,6 +2742,30 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.sm,
     ...shadows.xs,
+  },
+  paymentItemInContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+  },
+  paymentNoteContainer: {
+    backgroundColor: colors.gray[50],
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[100],
+  },
+  paymentNoteLabel: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.gray[500],
+    marginBottom: 2,
+  },
+  paymentNoteText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[700],
+    lineHeight: typography.fontSize.sm * typography.lineHeight.relaxed,
   },
   paymentItemLeft: {
     flexDirection: 'row',
