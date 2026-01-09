@@ -60,6 +60,9 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
   // メンバー追加用state
   const [addingToTeamId, setAddingToTeamId] = useState<string | null>(null);
 
+  // 未割り当てメンバーからチーム選択用state
+  const [assigningParticipant, setAssigningParticipant] = useState<{ id: string; name: string } | null>(null);
+
   const isOrganizer = currentEvent?.organizer_id === user?.id;
   const attendingParticipants = participants.filter((p) => p.attendance_status === 'attending');
   const checkedInParticipants = participants.filter((p) => p.check_in_status === 'checked_in');
@@ -215,6 +218,18 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
     try {
       await addMemberToTeam(addingToTeamId, participantId);
       setAddingToTeamId(null);
+    } catch (error: any) {
+      showAlert('エラー', error.message || 'メンバーの追加に失敗しました');
+    }
+  };
+
+  // 未割り当てメンバーをチームに追加
+  const handleAssignToTeam = async (teamId: string) => {
+    if (!assigningParticipant) return;
+
+    try {
+      await addMemberToTeam(teamId, assigningParticipant.id);
+      setAssigningParticipant(null);
     } catch (error: any) {
       showAlert('エラー', error.message || 'メンバーの追加に失敗しました');
     }
@@ -703,23 +718,64 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
       {isOrganizer && unassignedParticipants.length > 0 && (
         <Card variant="elevated" style={styles.unassignedCard}>
           <Text style={styles.unassignedTitle}>未割り当て ({unassignedParticipants.length}人)</Text>
+          <Text style={styles.unassignedHint}>タップしてチームに追加</Text>
           <View style={styles.unassignedList}>
             {unassignedParticipants.map((participant) => {
               const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
               return (
-                <View key={participant.id} style={styles.unassignedItem}>
+                <TouchableOpacity
+                  key={participant.id}
+                  style={styles.unassignedItem}
+                  onPress={() => setAssigningParticipant({ id: participant.id, name: displayName })}
+                  activeOpacity={0.7}
+                >
                   <Avatar
                     name={displayName}
                     imageUrl={participant.user?.avatar_url ?? undefined}
                     size="sm"
                   />
                   <Text style={styles.unassignedName}>{displayName}</Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
         </Card>
       )}
+
+      {/* 未割り当てメンバーのチーム選択モーダル */}
+      <Modal
+        visible={assigningParticipant !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAssigningParticipant(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {assigningParticipant?.name}を追加
+              </Text>
+              <TouchableOpacity onPress={() => setAssigningParticipant(null)}>
+                <X size={24} color={colors.gray[500]} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSubtitle}>追加先のチームを選択</Text>
+            <View style={styles.teamSelectList}>
+              {teams.map((team) => (
+                <TouchableOpacity
+                  key={team.id}
+                  style={styles.teamSelectItem}
+                  onPress={() => handleAssignToTeam(team.id)}
+                >
+                  <View style={[styles.teamSelectColor, { backgroundColor: team.color }]} />
+                  <Text style={styles.teamSelectName}>{team.name}</Text>
+                  <Text style={styles.teamSelectCount}>{team.members.length}人</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <View style={{ height: spacing.xl }} />
     </ScrollView>
@@ -1089,6 +1145,11 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: '600',
     color: colors.gray[700],
+    marginBottom: spacing.xs,
+  },
+  unassignedHint: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[400],
     marginBottom: spacing.sm,
   },
   unassignedList: {

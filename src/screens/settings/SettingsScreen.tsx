@@ -14,28 +14,19 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, Sun, Moon, Smartphone } from 'lucide-react-native';
+import { Camera } from 'lucide-react-native';
 import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../contexts/ToastContext';
-import { useTheme } from '../../contexts/ThemeContext';
-import { ThemeMode } from '../../stores/settingsStore';
 import { Button } from '../../components/common';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { RootStackParamList } from '../../types';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-const THEME_OPTIONS: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
-  { value: 'light', label: 'ライト', icon: Sun },
-  { value: 'dark', label: 'ダーク', icon: Moon },
-  { value: 'system', label: '自動', icon: Smartphone },
-];
-
 export const SettingsScreen: React.FC = () => {
   const navigation = useNavigation<NavigationProp>();
   const { user, signOut, deleteAccount, updateAvatar, isLoading } = useAuthStore();
   const { showToast } = useToast();
-  const { themeMode, setThemeMode } = useTheme();
   const [isUploadingAvatar, setIsUploadingAvatar] = React.useState(false);
 
   // ユーザー情報の安全な取得
@@ -192,42 +183,6 @@ export const SettingsScreen: React.FC = () => {
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(225).springify()} style={styles.section}>
-        <Text style={styles.sectionTitle}>テーマ</Text>
-
-        <View style={styles.menuCard}>
-          <View style={styles.themeContainer}>
-            {THEME_OPTIONS.map((option) => {
-              const IconComponent = option.icon;
-              const isSelected = themeMode === option.value;
-              return (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.themeOption,
-                    isSelected && styles.themeOptionSelected,
-                  ]}
-                  onPress={() => setThemeMode(option.value)}
-                >
-                  <IconComponent
-                    size={20}
-                    color={isSelected ? colors.primary : colors.gray[500]}
-                  />
-                  <Text
-                    style={[
-                      styles.themeOptionLabel,
-                      isSelected && styles.themeOptionLabelSelected,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      </Animated.View>
-
-      <Animated.View entering={FadeInDown.delay(250).springify()} style={styles.section}>
         <Text style={styles.sectionTitle}>その他</Text>
 
         <View style={styles.menuCard}>
@@ -430,34 +385,5 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginTop: spacing.lg,
     marginBottom: spacing.xl,
-  },
-  themeContainer: {
-    flexDirection: 'row',
-    padding: spacing.sm,
-    gap: spacing.sm,
-  },
-  themeOption: {
-    flex: 1,
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.gray[50],
-    gap: spacing.xs,
-  },
-  themeOptionSelected: {
-    backgroundColor: colors.primarySoft,
-    borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  themeOptionLabel: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[600],
-    fontWeight: '500',
-  },
-  themeOptionLabelSelected: {
-    color: colors.primary,
-    fontWeight: '600',
   },
 });

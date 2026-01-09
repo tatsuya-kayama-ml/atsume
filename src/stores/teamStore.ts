@@ -46,8 +46,7 @@ const TEAM_COLORS = [
 
 // Team name generator
 const generateTeamName = (index: number): string => {
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  return `チーム${letters[index] || index + 1}`;
+  return String(index + 1);
 };
 
 // Shuffle array (Fisher-Yates)

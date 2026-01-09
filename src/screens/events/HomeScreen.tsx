@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   Pressable,
   Platform,
   TouchableOpacity,
@@ -16,15 +15,13 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withRepeat,
-  withSequence,
-  withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Calendar as CalendarIcon, MapPin, Banknote, Users, Ticket, Plus, ChevronRight, List, CalendarDays } from 'lucide-react-native';
+import { Calendar as CalendarIcon, MapPin, Banknote, Users, Ticket, Plus, ChevronRight, List, CalendarDays, Sun, Moon, Sunrise, Sparkles } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -52,17 +49,6 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
-
-const getStatusConfig = (status: string) => {
-  switch (status) {
-    case 'open':
-      return { color: 'success' as const, label: '実施予定' };
-    case 'completed':
-      return { color: 'default' as const, label: '終了' };
-    default:
-      return { color: 'default' as const, label: status };
-  }
-};
 
 export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const { events, isLoading, fetchMyEvents } = useEventStore();
@@ -172,7 +158,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
   const renderEventItem = ({ item, index }: { item: Event; index: number }) => {
     const isOrganizer = item.organizer_id === user?.id;
     const { date, time, isToday, isTomorrow } = formatDateTime(item.date_time);
-    const statusConfig = getStatusConfig(item.status);
     const isPast = item.status === 'completed';
 
     return (
@@ -183,7 +168,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         <Card
           variant="elevated"
           onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}
-          style={[styles.eventCard, isPast && styles.eventCardPast]}
+          style={{ ...styles.eventCard, ...(isPast ? styles.eventCardPast : {}) }}
         >
           {/* Compact Date Banner */}
           <View style={[
@@ -308,77 +293,92 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate('Main', { screen: 'Settings' } as any);
   };
 
-  // Get greeting based on time
-  const getGreeting = () => {
+  // Get greeting based on time with icon
+  const getGreetingInfo = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'おはようございます';
-    if (hour < 18) return 'こんにちは';
-    return 'こんばんは';
+    if (hour < 6) return { text: 'おやすみなさい', icon: Moon, gradient: ['#1E3A5F', '#2563EB'] as const };
+    if (hour < 12) return { text: 'おはようございます', icon: Sunrise, gradient: ['#F59E0B', '#F97316'] as const };
+    if (hour < 18) return { text: 'こんにちは', icon: Sun, gradient: ['#2563EB', '#3B82F6'] as const };
+    return { text: 'こんばんは', icon: Moon, gradient: ['#4F46E5', '#7C3AED'] as const };
   };
 
+  const greetingInfo = getGreetingInfo();
+  const GreetingIcon = greetingInfo.icon;
+
+  // Count of events organized by me
+  const organizedEventsCount = useMemo(() =>
+    activeEvents.filter(e => e.organizer_id === user?.id).length,
+    [activeEvents, user?.id]
+  );
+
   const renderHeader = () => (
-    <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-      {/* Top row with greeting and avatar */}
-      <View style={styles.headerTop}>
-        <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.greetingContainer}>
-          <Text style={styles.greeting}>{getGreeting()}</Text>
-          <View style={styles.userNameRow}>
-            <Text style={styles.userName}>{user?.display_name || 'ゲスト'}</Text>
-            <Text style={styles.userNameSuffix}>さん</Text>
+    <View style={[styles.headerContainer, { paddingTop: insets.top }]}>
+      {/* Gradient Hero Section */}
+      <LinearGradient
+        colors={greetingInfo.gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.headerGradient}
+      >
+        {/* Top bar with avatar */}
+        <View style={styles.headerTopBar}>
+          <View style={styles.headerBrandArea}>
+            <View style={styles.greetingIconContainer}>
+              <GreetingIcon size={20} color={colors.white} />
+            </View>
+            <Text style={styles.headerBrandText}>ATSUME</Text>
+          </View>
+          <AnimatedPressable
+            style={[styles.avatarButton, avatarAnimatedStyle]}
+            onPress={handleAvatarPress}
+            onPressIn={() => {
+              avatarScale.value = withSpring(0.9, { damping: 15, stiffness: 300 });
+            }}
+            onPressOut={() => {
+              avatarScale.value = withSpring(1, { damping: 15, stiffness: 300 });
+            }}
+          >
+            <View style={styles.avatarWrapper}>
+              <Avatar name={user?.display_name || 'G'} imageUrl={user?.avatar_url || undefined} size="md" />
+              <View style={styles.avatarBadge} />
+            </View>
+          </AnimatedPressable>
+        </View>
+
+        {/* Stats Cards */}
+        <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.statsCardsContainer}>
+          <View style={styles.statsCard}>
+            <View style={styles.statsCardIconContainer}>
+              <CalendarIcon size={18} color={colors.primary} />
+            </View>
+            <View style={styles.statsCardContent}>
+              <Text style={styles.statsCardValue}>{activeEvents.length}</Text>
+              <Text style={styles.statsCardLabel}>予定</Text>
+            </View>
+          </View>
+          <View style={styles.statsCard}>
+            <View style={[styles.statsCardIconContainer, { backgroundColor: colors.successSoft }]}>
+              <Users size={18} color={colors.success} />
+            </View>
+            <View style={styles.statsCardContent}>
+              <Text style={styles.statsCardValue}>{organizedEventsCount}</Text>
+              <Text style={styles.statsCardLabel}>主催</Text>
+            </View>
+          </View>
+          <View style={styles.statsCard}>
+            <View style={[styles.statsCardIconContainer, { backgroundColor: colors.infoSoft }]}>
+              <Ticket size={18} color={colors.info} />
+            </View>
+            <View style={styles.statsCardContent}>
+              <Text style={styles.statsCardValue}>{participatingEvents.length}</Text>
+              <Text style={styles.statsCardLabel}>参加</Text>
+            </View>
           </View>
         </Animated.View>
-        <AnimatedPressable
-          style={[styles.avatarButton, avatarAnimatedStyle]}
-          onPress={handleAvatarPress}
-          onPressIn={() => {
-            avatarScale.value = withSpring(0.9, { damping: 15, stiffness: 300 });
-          }}
-          onPressOut={() => {
-            avatarScale.value = withSpring(1, { damping: 15, stiffness: 300 });
-          }}
-        >
-          <View style={styles.avatarWrapper}>
-            <Avatar name={user?.display_name || 'G'} imageUrl={user?.avatar_url || undefined} size="md" />
-            <View style={styles.avatarBadge} />
-          </View>
-        </AnimatedPressable>
-      </View>
+      </LinearGradient>
 
-      {/* Compact stats row and view toggle */}
-      <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.headerControls}>
-        {/* Compact Stats Row */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.statsChipContainer}
-        >
-          <View style={[styles.statsChip, styles.statsChipPrimary]}>
-            <CalendarIcon size={14} color={colors.primary} />
-            <Text style={[styles.statsChipValue, styles.statsChipValuePrimary]}>{activeEvents.length}</Text>
-            <Text style={styles.statsChipLabel}>予定</Text>
-          </View>
-          <View style={[styles.statsChip, styles.statsChipSuccess]}>
-            <Users size={14} color={colors.success} />
-            <Text style={[styles.statsChipValue, styles.statsChipValueSuccess]}>
-              {activeEvents.filter(e => e.organizer_id === user?.id).length}
-            </Text>
-            <Text style={styles.statsChipLabel}>主催</Text>
-          </View>
-          <View style={[styles.statsChip, styles.statsChipInfo]}>
-            <Ticket size={14} color={colors.info} />
-            <Text style={[styles.statsChipValue, styles.statsChipValueInfo]}>{participatingEvents.length}</Text>
-            <Text style={styles.statsChipLabel}>参加</Text>
-          </View>
-          {pastEvents.length > 0 && (
-            <View style={[styles.statsChip, styles.statsChipGray]}>
-              <CalendarIcon size={14} color={colors.gray[500]} />
-              <Text style={[styles.statsChipValue, styles.statsChipValueGray]}>{pastEvents.length}</Text>
-              <Text style={styles.statsChipLabel}>終了</Text>
-            </View>
-          )}
-        </ScrollView>
-
-        {/* View Mode Toggle */}
+      {/* View Mode Toggle - Below gradient */}
+      <View style={styles.viewModeSection}>
         <View style={styles.viewModeToggle}>
           <TouchableOpacity
             style={[styles.viewModeButton, viewMode === 'list' && styles.viewModeButtonActive]}
@@ -389,6 +389,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             activeOpacity={0.7}
           >
             <List size={16} color={viewMode === 'list' ? colors.white : colors.gray[500]} />
+            <Text style={[styles.viewModeText, viewMode === 'list' && styles.viewModeTextActive]}>リスト</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.viewModeButton, viewMode === 'calendar' && styles.viewModeButtonActive]}
@@ -396,9 +397,18 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
             activeOpacity={0.7}
           >
             <CalendarDays size={16} color={viewMode === 'calendar' ? colors.white : colors.gray[500]} />
+            <Text style={[styles.viewModeText, viewMode === 'calendar' && styles.viewModeTextActive]}>カレンダー</Text>
           </TouchableOpacity>
         </View>
-      </Animated.View>
+        {activeEvents.length > 0 && (
+          <View style={styles.upcomingBadge}>
+            <Sparkles size={12} color={colors.primary} />
+            <Text style={styles.upcomingBadgeText}>
+              {activeEvents.length}件の予定
+            </Text>
+          </View>
+        )}
+      </View>
     </View>
   );
 
@@ -623,41 +633,125 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
+  // New Header Styles
+  headerContainer: {
     backgroundColor: colors.white,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
   },
-  headerTop: {
+  headerGradient: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+    borderBottomLeftRadius: borderRadius['2xl'],
+    borderBottomRightRadius: borderRadius['2xl'],
+  },
+  headerTopBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
-  greetingContainer: {
+  headerBrandArea: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  greetingIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerBrandText: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '700',
+    color: colors.white,
+    letterSpacing: 1,
+  },
+  statsCardsContainer: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  statsCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.sm,
+    gap: spacing.sm,
+    ...shadows.sm,
+  },
+  statsCardIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statsCardContent: {
     flex: 1,
   },
-  greeting: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[500],
-    marginBottom: spacing['2xs'],
-    fontWeight: '500',
-  },
-  userNameRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  userName: {
-    fontSize: typography.fontSize['2xl'],
+  statsCardValue: {
+    fontSize: typography.fontSize.xl,
     fontWeight: '700',
     color: colors.gray[900],
-    letterSpacing: -0.5,
+    lineHeight: typography.fontSize.xl * 1.2,
   },
-  userNameSuffix: {
-    fontSize: typography.fontSize.lg,
+  statsCardLabel: {
+    fontSize: typography.fontSize['2xs'],
+    color: colors.gray[500],
+    fontWeight: '500',
+  },
+  // View Mode Section
+  viewModeSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.white,
+  },
+  viewModeToggle: {
+    flexDirection: 'row',
+    backgroundColor: colors.gray[100],
+    borderRadius: borderRadius.lg,
+    padding: 3,
+  },
+  viewModeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    gap: spacing.xs,
+  },
+  viewModeButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  viewModeText: {
+    fontSize: typography.fontSize.sm,
     fontWeight: '500',
     color: colors.gray[500],
-    marginLeft: spacing['2xs'],
+  },
+  viewModeTextActive: {
+    color: colors.white,
+  },
+  upcomingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    gap: spacing.xs,
+  },
+  upcomingBadgeText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.primary,
   },
   avatarButton: {
     padding: spacing['2xs'],
@@ -675,72 +769,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success,
     borderWidth: 2,
     borderColor: colors.white,
-  },
-  headerControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  statsChipContainer: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingRight: spacing.sm,
-  },
-  statsChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.full,
-    gap: 4,
-  },
-  statsChipPrimary: {
-    backgroundColor: colors.primary + '12',
-  },
-  statsChipSuccess: {
-    backgroundColor: colors.success + '12',
-  },
-  statsChipInfo: {
-    backgroundColor: colors.info + '12',
-  },
-  statsChipGray: {
-    backgroundColor: colors.gray[100],
-  },
-  statsChipValue: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '700',
-  },
-  statsChipValuePrimary: {
-    color: colors.primary,
-  },
-  statsChipValueSuccess: {
-    color: colors.success,
-  },
-  statsChipValueInfo: {
-    color: colors.info,
-  },
-  statsChipValueGray: {
-    color: colors.gray[600],
-  },
-  statsChipLabel: {
-    fontSize: typography.fontSize.xs,
-    color: colors.gray[500],
-    fontWeight: '500',
-  },
-  viewModeToggle: {
-    flexDirection: 'row',
-    backgroundColor: colors.gray[100],
-    borderRadius: borderRadius.lg,
-    padding: 3,
-  },
-  viewModeButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.md,
-  },
-  viewModeButtonActive: {
-    backgroundColor: colors.primary,
   },
   skeletonContainer: {
     flex: 1,

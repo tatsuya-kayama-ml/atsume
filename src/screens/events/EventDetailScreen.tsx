@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import {
   Modal,
   TextInput,
   Linking as RNLinking,
+  PanResponder,
+  Animated,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect } from '@react-navigation/native';
@@ -38,9 +40,6 @@ import {
   AlertTriangle,
   Copy,
   Bell,
-  BarChart3,
-  TrendingUp,
-  PieChart,
   UserPlus,
   ExternalLink,
   X,
@@ -49,7 +48,6 @@ import {
 } from 'lucide-react-native';
 import { useEventStore } from '../../stores/eventStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useMatchStore } from '../../stores/matchStore';
 import { useTimerStore, formatTime } from '../../stores/timerStore';
 import { useToast } from '../../contexts/ToastContext';
 import { Button, Card, Badge, Avatar, ContextHint } from '../../components/common';
@@ -545,8 +543,8 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         <ContextHint tooltipId="participant_attendance" />
       )}
 
-      {/* My Status Card */}
-      {myParticipation && (
+      {/* My Status Card - 主催者以外のみ表示 */}
+      {myParticipation && !isOrganizer && (
         <Card variant="elevated" style={styles.myStatusCard}>
           <View style={styles.myStatusHeader}>
             <View style={styles.myStatusTitleRow}>
@@ -666,70 +664,98 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
       )}
 
 
-      {/* Summary Stats */}
-      <Card variant="elevated" style={styles.summaryCard}>
-        <Text style={styles.summaryCardTitle}>出席予定</Text>
-        <View style={styles.participantSummary}>
-          <View style={styles.summaryItem}>
-            <View style={[styles.summaryIconCircle, { backgroundColor: colors.successSoft }]}>
-              <Text style={[styles.summaryCount, { color: colors.success }]}>{attendingParticipants.length}</Text>
+      {/* Attendance Stats */}
+      {isOrganizer ? (
+        <>
+          {/* 主催者向け: 出席予定 + 実際の出席 */}
+          <View style={styles.attendanceStatsGrid}>
+            {/* ヘッダー: タイトル + 追加ボタン */}
+            <View style={styles.attendanceStatsHeader}>
+              <Text style={styles.attendanceStatsHeaderTitle}>参加者一覧</Text>
+              <TouchableOpacity
+                style={styles.addParticipantIconButton}
+                onPress={() => setShowAddModal(true)}
+                activeOpacity={0.7}
+              >
+                <UserPlus size={18} color={colors.primary} />
+              </TouchableOpacity>
             </View>
-            <Text style={styles.summaryLabel}>出席予定</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <View style={[styles.summaryIconCircle, { backgroundColor: colors.warningSoft }]}>
-              <Text style={[styles.summaryCount, { color: colors.warning }]}>{maybeParticipants.length}</Text>
+            <View style={styles.attendanceStatsDivider} />
+            <View style={styles.attendanceStatsColumn}>
+              <Text style={styles.attendanceStatsTitle}>出席予定</Text>
+              <View style={styles.attendanceStatsRow}>
+                <View style={[styles.attendanceStatItem, { backgroundColor: colors.successSoft }]}>
+                  <Text style={[styles.attendanceStatValue, { color: colors.success }]}>{attendingParticipants.length}</Text>
+                  <Text style={styles.attendanceStatLabel}>出席</Text>
+                </View>
+                <View style={[styles.attendanceStatItem, { backgroundColor: colors.warningSoft }]}>
+                  <Text style={[styles.attendanceStatValue, { color: colors.warning }]}>{maybeParticipants.length}</Text>
+                  <Text style={styles.attendanceStatLabel}>未定</Text>
+                </View>
+                <View style={[styles.attendanceStatItem, { backgroundColor: colors.errorSoft }]}>
+                  <Text style={[styles.attendanceStatValue, { color: colors.error }]}>{notAttendingParticipants.length}</Text>
+                  <Text style={styles.attendanceStatLabel}>欠席</Text>
+                </View>
+              </View>
             </View>
-            <Text style={styles.summaryLabel}>未定</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <View style={[styles.summaryIconCircle, { backgroundColor: colors.errorSoft }]}>
-              <Text style={[styles.summaryCount, { color: colors.error }]}>{notAttendingParticipants.length}</Text>
-            </View>
-            <Text style={styles.summaryLabel}>欠席予定</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <View style={[styles.summaryIconCircle, { backgroundColor: colors.gray[100] }]}>
-              <Text style={[styles.summaryCount, { color: colors.gray[500] }]}>{pendingParticipants.length}</Text>
-            </View>
-            <Text style={styles.summaryLabel}>未回答</Text>
-          </View>
-        </View>
-
-        {/* Actual Attendance Summary (Organizer Only) */}
-        {isOrganizer && (
-          <>
-            <View style={styles.summaryDivider} />
-            <Text style={styles.summaryCardTitle}>実際の出席状況</Text>
-            <View style={styles.participantSummary}>
-              <View style={styles.summaryItem}>
-                <View style={[styles.summaryIconCircle, { backgroundColor: colors.successSoft }]}>
-                  <Text style={[styles.summaryCount, { color: colors.success }]}>
+            <View style={styles.attendanceStatsDivider} />
+            <View style={styles.attendanceStatsColumn}>
+              <Text style={styles.attendanceStatsTitle}>実際の出席</Text>
+              <View style={styles.attendanceStatsRow}>
+                <View style={[styles.attendanceStatItem, { backgroundColor: colors.successSoft }]}>
+                  <Text style={[styles.attendanceStatValue, { color: colors.success }]}>
                     {participants.filter(p => p.actual_attendance === true).length}
                   </Text>
+                  <Text style={styles.attendanceStatLabel}>出席</Text>
                 </View>
-                <Text style={styles.summaryLabel}>実出席</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <View style={[styles.summaryIconCircle, { backgroundColor: colors.errorSoft }]}>
-                  <Text style={[styles.summaryCount, { color: colors.error }]}>
+                <View style={[styles.attendanceStatItem, { backgroundColor: colors.errorSoft }]}>
+                  <Text style={[styles.attendanceStatValue, { color: colors.error }]}>
                     {participants.filter(p => p.actual_attendance === false).length}
                   </Text>
+                  <Text style={styles.attendanceStatLabel}>欠席</Text>
                 </View>
-                <Text style={styles.summaryLabel}>実欠席</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <View style={[styles.summaryIconCircle, { backgroundColor: colors.gray[100] }]}>
-                  <Text style={[styles.summaryCount, { color: colors.gray[500] }]}>
+                <View style={[styles.attendanceStatItem, { backgroundColor: colors.gray[100] }]}>
+                  <Text style={[styles.attendanceStatValue, { color: colors.gray[500] }]}>
                     {participants.filter(p => p.actual_attendance === null).length}
                   </Text>
+                  <Text style={styles.attendanceStatLabel}>未確認</Text>
                 </View>
-                <Text style={styles.summaryLabel}>未確認</Text>
               </View>
             </View>
-          </>
-        )}
-      </Card>
+          </View>
+        </>
+      ) : (
+        <Card variant="elevated" style={styles.summaryCard}>
+          {/* 参加者向け: シンプルな予定サマリー */}
+          <Text style={styles.summaryCardTitle}>出席予定</Text>
+          <View style={styles.participantSummary}>
+            <View style={styles.summaryItem}>
+              <View style={[styles.summaryIconCircle, { backgroundColor: colors.successSoft }]}>
+                <Text style={[styles.summaryCount, { color: colors.success }]}>{attendingParticipants.length}</Text>
+              </View>
+              <Text style={styles.summaryLabel}>出席</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <View style={[styles.summaryIconCircle, { backgroundColor: colors.warningSoft }]}>
+                <Text style={[styles.summaryCount, { color: colors.warning }]}>{maybeParticipants.length}</Text>
+              </View>
+              <Text style={styles.summaryLabel}>未定</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <View style={[styles.summaryIconCircle, { backgroundColor: colors.errorSoft }]}>
+                <Text style={[styles.summaryCount, { color: colors.error }]}>{notAttendingParticipants.length}</Text>
+              </View>
+              <Text style={styles.summaryLabel}>欠席</Text>
+            </View>
+            <View style={styles.summaryItem}>
+              <View style={[styles.summaryIconCircle, { backgroundColor: colors.gray[100] }]}>
+                <Text style={[styles.summaryCount, { color: colors.gray[500] }]}>{pendingParticipants.length}</Text>
+              </View>
+              <Text style={styles.summaryLabel}>未回答</Text>
+            </View>
+          </View>
+        </Card>
+      )}
 
       {/* Participant Groups */}
       {attendingParticipants.length > 0 && (
@@ -824,23 +850,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         </View>
       )}
 
-      {/* Add Participant Button (Organizer Only) */}
-      {isOrganizer && (
-        <TouchableOpacity
-          style={styles.addParticipantButton}
-          onPress={() => setShowAddModal(true)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.addParticipantIcon}>
-            <UserPlus size={20} color={colors.primary} />
-          </View>
-          <View>
-            <Text style={styles.addParticipantTitle}>参加者を手動で追加</Text>
-            <Text style={styles.addParticipantSubtitle}>アプリ未登録の方を追加できます</Text>
-          </View>
-        </TouchableOpacity>
-      )}
-
       {/* Add Participant Modal */}
       <AddParticipantModal
         visible={showAddModal}
@@ -932,8 +941,8 @@ const ParticipantCard: React.FC<{
           <View style={styles.checkInButtonsCompact}>
             <TouchableOpacity
               style={[
-                styles.checkInButtonCompact,
-                actualAttendance === true && styles.checkInButtonCompactActive,
+                styles.checkInButtonWithLabel,
+                actualAttendance === true && styles.checkInButtonWithLabelActive,
               ]}
               onPress={(e) => {
                 e.stopPropagation();
@@ -942,18 +951,18 @@ const ParticipantCard: React.FC<{
             >
               <Text
                 style={[
-                  styles.checkInButtonCompactText,
-                  actualAttendance === true && styles.checkInButtonCompactTextActive,
+                  styles.checkInButtonLabelText,
+                  actualAttendance === true && styles.checkInButtonLabelTextActive,
                 ]}
               >
-                ✓
+                出席
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
-                styles.checkInButtonCompact,
-                styles.checkInButtonCompactAbsent,
-                actualAttendance === false && styles.checkInButtonCompactAbsentActive,
+                styles.checkInButtonWithLabel,
+                styles.checkInButtonWithLabelAbsent,
+                actualAttendance === false && styles.checkInButtonWithLabelAbsentActive,
               ]}
               onPress={(e) => {
                 e.stopPropagation();
@@ -962,11 +971,11 @@ const ParticipantCard: React.FC<{
             >
               <Text
                 style={[
-                  styles.checkInButtonCompactText,
-                  actualAttendance === false && styles.checkInButtonCompactAbsentTextActive,
+                  styles.checkInButtonLabelText,
+                  actualAttendance === false && styles.checkInButtonLabelTextAbsentActive,
                 ]}
               >
-                ✕
+                欠席
               </Text>
             </TouchableOpacity>
           </View>
@@ -986,6 +995,8 @@ const ParticipantCard: React.FC<{
 };
 
 // Payment Tab
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const { participants, currentEvent, fetchParticipants, updateEvent, reportPayment, confirmPayment, updatePaymentStatus, isLoading } = useEventStore();
   const { user } = useAuthStore();
@@ -1005,6 +1016,87 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     { key: 'bank' as const, label: '銀行振込', icon: '🏦' },
     { key: 'other' as const, label: 'その他', icon: '📝' },
   ];
+
+  // Swipe-to-dismiss animation for payment modal
+  const paymentModalTranslateY = useRef(new Animated.Value(0)).current;
+  const paymentBackdropOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (showPaymentLinkModal) {
+      paymentModalTranslateY.setValue(SCREEN_HEIGHT);
+      Animated.parallel([
+        Animated.timing(paymentBackdropOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.spring(paymentModalTranslateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 11,
+        }),
+      ]).start();
+    }
+  }, [showPaymentLinkModal]);
+
+  const closePaymentModal = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(paymentModalTranslateY, {
+        toValue: SCREEN_HEIGHT,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(paymentBackdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowPaymentLinkModal(false);
+      paymentModalTranslateY.setValue(0);
+    });
+  }, []);
+
+  const paymentPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && gestureState.dy > 0;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          paymentModalTranslateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          Animated.parallel([
+            Animated.timing(paymentModalTranslateY, {
+              toValue: SCREEN_HEIGHT,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(paymentBackdropOpacity, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ]).start(() => {
+            setShowPaymentLinkModal(false);
+            paymentModalTranslateY.setValue(0);
+          });
+        } else {
+          Animated.spring(paymentModalTranslateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 100,
+            friction: 10,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   useFocusEffect(
     useCallback(() => {
@@ -1383,23 +1475,34 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         </Card>
       )}
 
-      {/* Payment Link Modal */}
+      {/* Payment Link Modal - Bottom Sheet Style */}
       <Modal
         visible={showPaymentLinkModal}
         transparent
-        animationType="fade"
-        onRequestClose={() => setShowPaymentLinkModal(false)}
+        animationType="none"
+        onRequestClose={closePaymentModal}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>支払い情報を設定</Text>
-              <TouchableOpacity
-                onPress={() => setShowPaymentLinkModal(false)}
-                style={styles.modalCloseButton}
-              >
-                <X size={24} color={colors.gray[500]} />
-              </TouchableOpacity>
+        <View style={styles.paymentModalOverlay}>
+          <Animated.View style={[styles.paymentModalBackdrop, { opacity: paymentBackdropOpacity }]}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={closePaymentModal}
+            />
+          </Animated.View>
+          <Animated.View style={[styles.paymentModalContainer, { transform: [{ translateY: paymentModalTranslateY }] }]}>
+            {/* Swipeable handle area */}
+            <View {...paymentPanResponder.panHandlers} style={styles.paymentModalHandleArea}>
+              <View style={styles.paymentModalHandle} />
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>支払い情報を設定</Text>
+                <TouchableOpacity
+                  onPress={closePaymentModal}
+                  style={styles.modalCloseButton}
+                >
+                  <X size={24} color={colors.gray[500]} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.modalBody}>
@@ -1500,7 +1603,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               <View style={styles.modalFooterButtons}>
                 <TouchableOpacity
                   style={styles.modalCancelButton}
-                  onPress={() => setShowPaymentLinkModal(false)}
+                  onPress={closePaymentModal}
                   disabled={isSavingLink}
                 >
                   <Text style={styles.modalCancelButtonText}>キャンセル</Text>
@@ -1519,7 +1622,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
+          </Animated.View>
         </View>
       </Modal>
 
@@ -1674,590 +1777,102 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   );
 };
 
-// Stats Tab - 対戦結果統計
-const StatsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
-  const { tournament, matches, fetchTournament, isLoading } = useMatchStore();
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchTournament(eventId);
-    }, [eventId])
-  );
-
-  // 完了した試合のみを対象
-  const completedMatches = matches.filter((m) => m.status === 'completed');
-
-  // チーム/個人ごとの勝敗統計を計算
-  const teamStats = new Map<string, {
-    id: string;
-    name: string;
-    color: string;
-    wins: number;
-    losses: number;
-    draws: number;
-    played: number;
-    pointsFor: number;
-    pointsAgainst: number;
-  }>();
-
-  completedMatches.forEach((match) => {
-    if (!match.team1_id || !match.team2_id) return;
-
-    // チーム1の統計を初期化
-    if (!teamStats.has(match.team1_id) && match.team1) {
-      teamStats.set(match.team1_id, {
-        id: match.team1_id,
-        name: match.team1.name,
-        color: match.team1.color,
-        wins: 0,
-        losses: 0,
-        draws: 0,
-        played: 0,
-        pointsFor: 0,
-        pointsAgainst: 0,
-      });
-    }
-
-    // チーム2の統計を初期化
-    if (!teamStats.has(match.team2_id) && match.team2) {
-      teamStats.set(match.team2_id, {
-        id: match.team2_id,
-        name: match.team2.name,
-        color: match.team2.color,
-        wins: 0,
-        losses: 0,
-        draws: 0,
-        played: 0,
-        pointsFor: 0,
-        pointsAgainst: 0,
-      });
-    }
-
-    const team1Stats = teamStats.get(match.team1_id);
-    const team2Stats = teamStats.get(match.team2_id);
-
-    if (!team1Stats || !team2Stats) return;
-
-    const score1 = match.team1_score ?? 0;
-    const score2 = match.team2_score ?? 0;
-
-    team1Stats.played++;
-    team2Stats.played++;
-    team1Stats.pointsFor += score1;
-    team1Stats.pointsAgainst += score2;
-    team2Stats.pointsFor += score2;
-    team2Stats.pointsAgainst += score1;
-
-    if (score1 > score2) {
-      team1Stats.wins++;
-      team2Stats.losses++;
-    } else if (score2 > score1) {
-      team2Stats.wins++;
-      team1Stats.losses++;
-    } else {
-      team1Stats.draws++;
-      team2Stats.draws++;
-    }
-  });
-
-  // 勝利数でソート
-  const sortedTeams = Array.from(teamStats.values()).sort((a, b) => {
-    if (b.wins !== a.wins) return b.wins - a.wins;
-    const aPointDiff = a.pointsFor - a.pointsAgainst;
-    const bPointDiff = b.pointsFor - b.pointsAgainst;
-    if (bPointDiff !== aPointDiff) return bPointDiff - aPointDiff;
-    return b.pointsFor - a.pointsFor;
-  });
-
-  // トーナメントがない場合
-  if (!tournament) {
-    return (
-      <View style={statsStyles.noAccessContainer}>
-        <BarChart3 size={48} color={colors.gray[300]} />
-        <Text style={statsStyles.noAccessTitle}>対戦データなし</Text>
-        <Text style={statsStyles.noAccessMessage}>
-          対戦表を作成すると、ここに結果統計が表示されます
-        </Text>
-      </View>
-    );
-  }
-
-  // 試合がない場合
-  if (completedMatches.length === 0) {
-    return (
-      <View style={statsStyles.noAccessContainer}>
-        <BarChart3 size={48} color={colors.gray[300]} />
-        <Text style={statsStyles.noAccessTitle}>試合結果なし</Text>
-        <Text style={statsStyles.noAccessMessage}>
-          試合結果を入力すると、ここに統計が表示されます
-        </Text>
-      </View>
-    );
-  }
-
-  const totalMatches = completedMatches.length;
-  const totalPoints = completedMatches.reduce((sum, m) => sum + (m.team1_score ?? 0) + (m.team2_score ?? 0), 0);
-
-  return (
-    <ScrollView
-      style={styles.tabContent}
-      contentContainerStyle={styles.tabContentContainer}
-      refreshControl={
-        <RefreshControl
-          refreshing={isLoading}
-          onRefresh={() => fetchTournament(eventId)}
-          colors={[colors.primary]}
-          tintColor={colors.primary}
-        />
-      }
-      showsVerticalScrollIndicator={false}
-    >
-      {/* 概要 */}
-      <Card variant="elevated" style={statsStyles.statsCard}>
-        <View style={styles.cardHeader}>
-          <BarChart3 size={18} color={colors.primary} style={styles.cardHeaderIconStyle} />
-          <Text style={styles.cardHeaderTitle}>概要</Text>
-        </View>
-
-        <View style={statsStyles.overviewGrid}>
-          <View style={[statsStyles.overviewItem, statsStyles.overviewItemPrimary]}>
-            <Users size={20} color={colors.primary} />
-            <Text style={statsStyles.overviewValue}>{sortedTeams.length}</Text>
-            <Text style={statsStyles.overviewLabel}>参加チーム</Text>
-          </View>
-          <View style={[statsStyles.overviewItem, statsStyles.overviewItemSuccess]}>
-            <TrendingUp size={20} color={colors.success} />
-            <Text style={statsStyles.overviewValue}>{totalMatches}</Text>
-            <Text style={statsStyles.overviewLabel}>試合数</Text>
-          </View>
-          <View style={[statsStyles.overviewItem, statsStyles.overviewItemWarning]}>
-            <PieChart size={20} color={colors.warning} />
-            <Text style={statsStyles.overviewValue}>{totalPoints}</Text>
-            <Text style={statsStyles.overviewLabel}>総得点</Text>
-          </View>
-        </View>
-      </Card>
-
-      {/* 勝利ランキング */}
-      <Card variant="elevated" style={statsStyles.statsCard}>
-        <View style={styles.cardHeader}>
-          <TrendingUp size={18} color={colors.success} style={styles.cardHeaderIconStyle} />
-          <Text style={styles.cardHeaderTitle}>勝利ランキング</Text>
-        </View>
-
-        <View style={statsStyles.rankingList}>
-          {sortedTeams.map((team, index) => {
-            const winRate = team.played > 0 ? Math.round((team.wins / team.played) * 100) : 0;
-            return (
-              <View key={team.id} style={statsStyles.rankingItem}>
-                <View style={statsStyles.rankingLeft}>
-                  <View style={[
-                    statsStyles.rankBadge,
-                    index === 0 && statsStyles.rankBadgeGold,
-                    index === 1 && statsStyles.rankBadgeSilver,
-                    index === 2 && statsStyles.rankBadgeBronze,
-                  ]}>
-                    <Text style={[
-                      statsStyles.rankNumber,
-                      index < 3 && statsStyles.rankNumberTop,
-                    ]}>{index + 1}</Text>
-                  </View>
-                  <View style={[statsStyles.teamColorDot, { backgroundColor: team.color }]} />
-                  <Text style={statsStyles.teamName} numberOfLines={1}>{team.name}</Text>
-                </View>
-                <View style={statsStyles.rankingRight}>
-                  <View style={statsStyles.statColumn}>
-                    <Text style={statsStyles.statMainValue}>{team.wins}</Text>
-                    <Text style={statsStyles.statSubLabel}>勝</Text>
-                  </View>
-                  <View style={statsStyles.statColumn}>
-                    <Text style={[statsStyles.statMainValue, { color: colors.gray[500] }]}>{team.draws}</Text>
-                    <Text style={statsStyles.statSubLabel}>分</Text>
-                  </View>
-                  <View style={statsStyles.statColumn}>
-                    <Text style={[statsStyles.statMainValue, { color: colors.error }]}>{team.losses}</Text>
-                    <Text style={statsStyles.statSubLabel}>敗</Text>
-                  </View>
-                  <View style={[statsStyles.statColumn, statsStyles.winRateColumn]}>
-                    <Text style={statsStyles.winRateValue}>{winRate}%</Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      </Card>
-
-      {/* 得点ランキング */}
-      <Card variant="elevated" style={statsStyles.statsCard}>
-        <View style={styles.cardHeader}>
-          <PieChart size={18} color={colors.primary} style={styles.cardHeaderIconStyle} />
-          <Text style={styles.cardHeaderTitle}>得点ランキング</Text>
-        </View>
-
-        <View style={statsStyles.rankingList}>
-          {[...sortedTeams]
-            .sort((a, b) => b.pointsFor - a.pointsFor)
-            .map((team, index) => {
-              const pointDiff = team.pointsFor - team.pointsAgainst;
-              return (
-                <View key={team.id} style={statsStyles.rankingItem}>
-                  <View style={statsStyles.rankingLeft}>
-                    <View style={[
-                      statsStyles.rankBadge,
-                      index === 0 && statsStyles.rankBadgeGold,
-                      index === 1 && statsStyles.rankBadgeSilver,
-                      index === 2 && statsStyles.rankBadgeBronze,
-                    ]}>
-                      <Text style={[
-                        statsStyles.rankNumber,
-                        index < 3 && statsStyles.rankNumberTop,
-                      ]}>{index + 1}</Text>
-                    </View>
-                    <View style={[statsStyles.teamColorDot, { backgroundColor: team.color }]} />
-                    <Text style={statsStyles.teamName} numberOfLines={1}>{team.name}</Text>
-                  </View>
-                  <View style={statsStyles.rankingRight}>
-                    <View style={statsStyles.pointsColumn}>
-                      <Text style={statsStyles.pointsValue}>{team.pointsFor}</Text>
-                      <Text style={statsStyles.pointsLabel}>得点</Text>
-                    </View>
-                    <View style={statsStyles.pointsColumn}>
-                      <Text style={[statsStyles.pointsValue, { color: colors.gray[500] }]}>{team.pointsAgainst}</Text>
-                      <Text style={statsStyles.pointsLabel}>失点</Text>
-                    </View>
-                    <View style={[statsStyles.pointsColumn, statsStyles.pointDiffColumn]}>
-                      <Text style={[
-                        statsStyles.pointDiffValue,
-                        pointDiff > 0 && { color: colors.success },
-                        pointDiff < 0 && { color: colors.error },
-                      ]}>
-                        {pointDiff > 0 ? '+' : ''}{pointDiff}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
-        </View>
-      </Card>
-
-      <View style={{ height: spacing.xl }} />
-    </ScrollView>
-  );
-};
-
-// Stats Tab Styles
-const statsStyles = StyleSheet.create({
-  statsCard: {
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  overviewGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  overviewItem: {
-    flex: 1,
-    minWidth: '45%',
-    alignItems: 'center',
-    padding: spacing.md,
-    borderRadius: borderRadius.lg,
-  },
-  overviewItemPrimary: {
-    backgroundColor: colors.primarySoft,
-  },
-  overviewItemSuccess: {
-    backgroundColor: `${colors.success}15`,
-  },
-  overviewItemWarning: {
-    backgroundColor: `${colors.warning}15`,
-  },
-  overviewItemError: {
-    backgroundColor: `${colors.error}15`,
-  },
-  overviewValue: {
-    fontSize: typography.fontSize['2xl'],
-    fontWeight: '700',
-    color: colors.gray[900],
-    marginTop: spacing.xs,
-  },
-  overviewLabel: {
-    fontSize: typography.fontSize.xs,
-    color: colors.gray[500],
-    marginTop: 2,
-  },
-  rateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.lg,
-  },
-  rateCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: colors.primarySoft,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 4,
-    borderColor: colors.primary,
-  },
-  rateValue: {
-    fontSize: typography.fontSize['2xl'],
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  rateDetails: {
-    flex: 1,
-    gap: spacing.sm,
-  },
-  rateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  rateDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  rateLabel: {
-    flex: 1,
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[600],
-  },
-  rateCount: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[900],
-  },
-  collectionProgress: {
-    marginBottom: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: spacing.xs,
-  },
-  progressLabel: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[600],
-  },
-  progressPercent: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  progressBar: {
-    height: 8,
-    backgroundColor: colors.gray[100],
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: colors.primary,
-    borderRadius: 4,
-  },
-  paymentBreakdown: {
-    gap: spacing.sm,
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  breakdownDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  breakdownLabel: {
-    flex: 1,
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[600],
-  },
-  breakdownCount: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '500',
-    color: colors.gray[900],
-  },
-  distributionList: {
-    gap: spacing.md,
-  },
-  distributionRow: {
-    gap: spacing.xs,
-  },
-  distributionLabel: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[700],
-    marginBottom: 4,
-  },
-  statBarContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  statBarBg: {
-    flex: 1,
-    height: 12,
-    backgroundColor: colors.gray[100],
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  statBarFill: {
-    height: '100%',
-    borderRadius: 6,
-  },
-  statBarText: {
-    fontSize: typography.fontSize.xs,
-    color: colors.gray[500],
-    minWidth: 70,
-    textAlign: 'right',
-  },
-  noAccessContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-    backgroundColor: colors.background,
-  },
-  noAccessTitle: {
-    fontSize: typography.fontSize.lg,
-    fontWeight: '600',
-    color: colors.gray[700],
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  noAccessMessage: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[500],
-    textAlign: 'center',
-  },
-  // ランキング用スタイル
-  rankingList: {
-    gap: spacing.sm,
-  },
-  rankingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
-  },
-  rankingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: spacing.sm,
-  },
-  rankingRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  rankBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.gray[100],
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  rankBadgeGold: {
-    backgroundColor: '#FFD700',
-  },
-  rankBadgeSilver: {
-    backgroundColor: '#C0C0C0',
-  },
-  rankBadgeBronze: {
-    backgroundColor: '#CD7F32',
-  },
-  rankNumber: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[600],
-  },
-  rankNumberTop: {
-    color: colors.white,
-  },
-  teamColorDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  teamName: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '500',
-    color: colors.gray[900],
-    flex: 1,
-  },
-  statColumn: {
-    alignItems: 'center',
-    minWidth: 32,
-  },
-  statMainValue: {
-    fontSize: typography.fontSize.lg,
-    fontWeight: '700',
-    color: colors.success,
-  },
-  statSubLabel: {
-    fontSize: typography.fontSize.xs,
-    color: colors.gray[400],
-  },
-  winRateColumn: {
-    minWidth: 45,
-    backgroundColor: colors.primarySoft,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-  },
-  winRateValue: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-    color: colors.primary,
-  },
-  pointsColumn: {
-    alignItems: 'center',
-    minWidth: 40,
-  },
-  pointsValue: {
-    fontSize: typography.fontSize.base,
-    fontWeight: '600',
-    color: colors.gray[900],
-  },
-  pointsLabel: {
-    fontSize: typography.fontSize.xs,
-    color: colors.gray[400],
-  },
-  pointDiffColumn: {
-    minWidth: 45,
-    backgroundColor: colors.gray[50],
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-  },
-  pointDiffValue: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[600],
-  },
-});
-
 export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   const { eventId } = route.params;
-  const { currentEvent, fetchEventById, deleteEvent, duplicateEvent, clearCurrentEvent } = useEventStore();
+  const { currentEvent, fetchEventById, deleteEvent, clearCurrentEvent } = useEventStore();
   const { user } = useAuthStore();
   const { activeTimer } = useTimerStore();
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const [showReminderModal, setShowReminderModal] = React.useState(false);
   const [showTimerModal, setShowTimerModal] = React.useState(false);
+
+  // Timer modal swipe-to-dismiss
+  const timerModalTranslateY = useRef(new Animated.Value(0)).current;
+  const timerBackdropOpacity = useRef(new Animated.Value(0)).current;
+
+  // Animate modal open
+  useEffect(() => {
+    if (showTimerModal) {
+      // Reset position and start animations
+      timerModalTranslateY.setValue(300);
+      Animated.parallel([
+        Animated.timing(timerBackdropOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.spring(timerModalTranslateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 11,
+        }),
+      ]).start();
+    }
+  }, [showTimerModal]);
+
+  const closeTimerModal = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(timerModalTranslateY, {
+        toValue: 500,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(timerBackdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowTimerModal(false);
+      timerModalTranslateY.setValue(0);
+    });
+  }, []);
+
+  const timerPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only respond to vertical swipes
+        return Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && gestureState.dy > 0;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // Only allow downward movement
+        if (gestureState.dy > 0) {
+          timerModalTranslateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        // If swiped down more than 100px or velocity is high, close the modal
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          Animated.parallel([
+            Animated.timing(timerModalTranslateY, {
+              toValue: 500,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(timerBackdropOpacity, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ]).start(() => {
+            setShowTimerModal(false);
+            timerModalTranslateY.setValue(0);
+          });
+        } else {
+          // Snap back
+          Animated.spring(timerModalTranslateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 100,
+            friction: 10,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   // タイマーがこのイベントでアクティブかどうか
   const isTimerActive = activeTimer?.eventId === eventId && (activeTimer?.isRunning || activeTimer?.isPrepared);
@@ -2298,25 +1913,6 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
                 style={styles.headerButton}
               >
                 <Bell size={20} color={colors.gray[600]} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  duplicateEvent(eventId)
-                    .then((newEvent) => {
-                      navigation.replace('EventDetail', { eventId: newEvent.id });
-                    })
-                    .catch((error: any) => {
-                      const errorMessage = error.message || '複製に失敗しました';
-                      if (Platform.OS === 'web') {
-                        window.alert(`エラー: ${errorMessage}`);
-                      } else {
-                        Alert.alert('エラー', errorMessage);
-                      }
-                    });
-                }}
-                style={styles.headerButton}
-              >
-                <Copy size={20} color={colors.gray[600]} />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => navigation.navigate('EventEdit', { eventId })}
@@ -2456,9 +2052,6 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         <Tab.Screen name="Matches" options={{ title: '対戦表' }}>
           {() => <MatchesTab eventId={eventId} />}
         </Tab.Screen>
-        <Tab.Screen name="Stats" options={{ title: '結果' }}>
-          {() => <StatsTab eventId={eventId} />}
-        </Tab.Screen>
       </Tab.Navigator>
 
       <ReminderModal
@@ -2469,32 +2062,47 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         onError={(message) => showToast(message, 'error')}
       />
 
-      {/* Timer Modal - Bottom Sheet Style */}
+      {/* Timer Modal - Bottom Sheet Style with swipe to dismiss */}
       <Modal
         visible={showTimerModal}
-        animationType="slide"
+        animationType="none"
         transparent={true}
-        onRequestClose={() => setShowTimerModal(false)}
+        onRequestClose={closeTimerModal}
       >
         <View style={styles.timerModalOverlay}>
-          <TouchableOpacity
-            style={styles.timerModalBackdrop}
-            activeOpacity={1}
-            onPress={() => setShowTimerModal(false)}
-          />
-          <View style={styles.timerModalContainer}>
-            <View style={styles.timerModalHandle} />
-            <View style={styles.timerModalHeader}>
-              <Text style={styles.timerModalTitle}>タイマー</Text>
-              <TouchableOpacity
-                onPress={() => setShowTimerModal(false)}
-                style={styles.timerModalCloseButton}
-              >
-                <X size={22} color={colors.gray[500]} />
-              </TouchableOpacity>
+          <Animated.View
+            style={[
+              styles.timerModalBackdrop,
+              { opacity: timerBackdropOpacity },
+            ]}
+          >
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={closeTimerModal}
+            />
+          </Animated.View>
+          <Animated.View
+            style={[
+              styles.timerModalContainer,
+              { transform: [{ translateY: timerModalTranslateY }] },
+            ]}
+          >
+            {/* Swipeable handle area */}
+            <View {...timerPanResponder.panHandlers} style={styles.timerModalHandleArea}>
+              <View style={styles.timerModalHandle} />
+              <View style={styles.timerModalHeader}>
+                <Text style={styles.timerModalTitle}>タイマー</Text>
+                <TouchableOpacity
+                  onPress={closeTimerModal}
+                  style={styles.timerModalCloseButton}
+                >
+                  <X size={22} color={colors.gray[500]} />
+                </TouchableOpacity>
+              </View>
             </View>
-            <TimerTab eventId={eventId} onClose={() => setShowTimerModal(false)} />
-          </View>
+            <TimerTab eventId={eventId} onClose={closeTimerModal} />
+          </Animated.View>
         </View>
       </Modal>
     </>
@@ -3394,6 +3002,68 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
 
+  // Attendance Stats Grid (Organizer View)
+  attendanceStatsGrid: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.xl,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    ...shadows.sm,
+  },
+  attendanceStatsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  attendanceStatsHeaderTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  addParticipantIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attendanceStatsColumn: {
+    marginBottom: spacing.xs,
+  },
+  attendanceStatsTitle: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.gray[500],
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  attendanceStatsRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  attendanceStatItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+  },
+  attendanceStatValue: {
+    fontSize: typography.fontSize.xl,
+    fontWeight: '700',
+  },
+  attendanceStatLabel: {
+    fontSize: typography.fontSize.xs,
+    color: colors.gray[600],
+    marginTop: 2,
+  },
+  attendanceStatsDivider: {
+    height: 1,
+    backgroundColor: colors.gray[200],
+    marginVertical: spacing.md,
+  },
+
   // Check-in Buttons
   checkInButtons: {
     flexDirection: 'row',
@@ -3465,6 +3135,40 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   checkInButtonCompactAbsentTextActive: {
+    color: colors.white,
+  },
+
+  // Check-in Buttons with Label
+  checkInButtonWithLabel: {
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    borderColor: colors.gray[300],
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkInButtonWithLabelActive: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+  },
+  checkInButtonWithLabelAbsent: {
+    borderColor: colors.gray[300],
+  },
+  checkInButtonWithLabelAbsentActive: {
+    backgroundColor: colors.error,
+    borderColor: colors.error,
+  },
+  checkInButtonLabelText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.gray[600],
+  },
+  checkInButtonLabelTextActive: {
+    color: colors.white,
+  },
+  checkInButtonLabelTextAbsentActive: {
     color: colors.white,
   },
 
@@ -3769,6 +3473,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: borderRadius['2xl'],
     maxHeight: '70%',
   },
+  timerModalHandleArea: {
+    // Swipeable area for drag-to-dismiss
+  },
   timerModalHandle: {
     width: 36,
     height: 4,
@@ -3794,5 +3501,32 @@ const styles = StyleSheet.create({
   },
   timerModalCloseButton: {
     padding: spacing.xs,
+  },
+  // Payment Modal - Bottom Sheet Style
+  paymentModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  paymentModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  paymentModalContainer: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: borderRadius['2xl'],
+    borderTopRightRadius: borderRadius['2xl'],
+    maxHeight: '85%',
+  },
+  paymentModalHandleArea: {
+    // Swipeable area for drag-to-dismiss
+  },
+  paymentModalHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: colors.gray[300],
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
 });

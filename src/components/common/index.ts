@@ -11,3 +11,4 @@ export { Toast } from './Toast';
 export { AnimatedRefreshControl } from './AnimatedRefreshControl';
 export { Tooltip } from './Tooltip';
 export { ContextHint } from './ContextHint';
+export { SwipeableBottomSheet } from './SwipeableBottomSheet';

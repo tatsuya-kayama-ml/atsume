@@ -58,13 +58,13 @@ const DEFAULT_PRESETS: TimerPreset[] = [
   { id: 'preset-30', name: '30分', duration: 30 * 60 },
 ];
 
-// タイマー完了時の通知音を再生
+// タイマー完了時の通知音を再生（試合のホイッスル音）
 const playCompletionSound = async () => {
   try {
     const { sound } = await Audio.Sound.createAsync(
-      // システム通知音的なビープ音を生成
-      { uri: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3' },
-      { shouldPlay: true, volume: 0.8 }
+      // スポーツホイッスル音（笛の音）
+      { uri: 'https://assets.mixkit.co/active_storage/sfx/2542/2542-preview.mp3' },
+      { shouldPlay: true, volume: 1.0 }
     );
     // 再生後にアンロード
     sound.setOnPlaybackStatusUpdate((status) => {

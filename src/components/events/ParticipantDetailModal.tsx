@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  PanResponder,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { X, User, Check, Trash2, Edit3 } from 'lucide-react-native';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { Button, Avatar, Badge } from '../common';
 import { AttendanceStatus, PaymentStatus, GenderType, SkillLevelSettings, GenderSettings, EventParticipant } from '../../types';
 import { confirmAlert } from '../../utils/alert';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface ParticipantDetailModalProps {
   visible: boolean;
@@ -66,6 +71,90 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Swipe-to-dismiss animation
+  const translateY = useRef(new Animated.Value(0)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+
+  // Animate modal open
+  useEffect(() => {
+    if (visible) {
+      translateY.setValue(SCREEN_HEIGHT);
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.spring(translateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 11,
+        }),
+      ]).start();
+    }
+  }, [visible]);
+
+  const closeModal = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: SCREEN_HEIGHT,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIsEditing(false);
+      onClose();
+      translateY.setValue(0);
+    });
+  }, [onClose]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && gestureState.dy > 0;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          translateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          Animated.parallel([
+            Animated.timing(translateY, {
+              toValue: SCREEN_HEIGHT,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(backdropOpacity, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ]).start(() => {
+            setIsEditing(false);
+            onClose();
+            translateY.setValue(0);
+          });
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 100,
+            friction: 10,
+          }).start();
+        }
+      },
+    })
+  ).current;
 
   // Edit form state
   const [editName, setEditName] = useState('');
@@ -159,10 +248,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
     }
   };
 
-  const handleClose = () => {
-    setIsEditing(false);
-    onClose();
-  };
+  const handleClose = closeModal;
 
   const getAttendanceConfig = (status: AttendanceStatus) => {
     const option = ATTENDANCE_OPTIONS.find(o => o.value === status);
@@ -188,7 +274,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="none"
       transparent
       onRequestClose={handleClose}
     >
@@ -196,24 +282,39 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <Avatar name={displayName} imageUrl={avatarUrl ?? undefined} size="lg" />
-            <View style={styles.headerInfo}>
-              <Text style={styles.title}>{displayName}</Text>
-              <View style={styles.headerBadges}>
-                {isManual && (
-                  <Badge label="手動追加" color="default" size="sm" variant="soft" />
-                )}
+        <Animated.View
+          style={[styles.backdrop, { opacity: backdropOpacity }]}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={handleClose}
+          />
+        </Animated.View>
+        <Animated.View
+          style={[styles.container, { transform: [{ translateY }] }]}
+        >
+          {/* Swipeable handle area */}
+          <View {...panResponder.panHandlers} style={styles.handleArea}>
+            <View style={styles.handle} />
+            <View style={styles.header}>
+              <Avatar name={displayName} imageUrl={avatarUrl ?? undefined} size="lg" />
+              <View style={styles.headerInfo}>
+                <Text style={styles.title}>{displayName}</Text>
+                <View style={styles.headerBadges}>
+                  {isManual && (
+                    <Badge label="手動追加" color="default" size="sm" variant="soft" />
+                  )}
+                </View>
               </View>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={handleClose}
+                activeOpacity={0.7}
+              >
+                <X size={24} color={colors.gray[500]} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={handleClose}
-              activeOpacity={0.7}
-            >
-              <X size={24} color={colors.gray[500]} />
-            </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -517,7 +618,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
               )}
             </View>
           )}
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -526,8 +627,11 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   container: {
     backgroundColor: colors.white,
@@ -535,6 +639,18 @@ const styles = StyleSheet.create({
     borderTopRightRadius: borderRadius['2xl'],
     maxHeight: '90%',
     ...shadows.lg,
+  },
+  handleArea: {
+    // Swipeable area
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    backgroundColor: colors.gray[300],
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   header: {
     flexDirection: 'row',

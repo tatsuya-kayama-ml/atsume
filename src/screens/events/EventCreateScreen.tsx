@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,18 +9,20 @@ import {
   TouchableOpacity,
   Alert,
   Switch,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { FileText, MapPin, Coins, Lock, BarChart3, Calendar, Clock } from 'lucide-react-native';
+import { FileText, MapPin, Coins, Lock, BarChart3, Calendar, Clock, Copy, X, ChevronRight } from 'lucide-react-native';
 import { Button, Input, Card, DateTimePicker } from '../../components/common';
 import { useEventStore } from '../../stores/eventStore';
 import { useToast } from '../../contexts/ToastContext';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
-import { RootStackParamList, SkillLevelOption, SkillLevelSettings, GenderOption, GenderSettings, GenderType } from '../../types';
-import { logger } from '../../utils';
+import { RootStackParamList, SkillLevelOption, SkillLevelSettings, GenderOption, GenderSettings, GenderType, Event } from '../../types';
+import { logger, formatDateTime } from '../../utils';
 
 // デフォルトのスキルレベルオプション（3段階）
 const DEFAULT_SKILL_LEVEL_OPTIONS: SkillLevelOption[] = [
@@ -69,11 +71,14 @@ interface Props {
 }
 
 export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
-  const { createEvent, isLoading } = useEventStore();
+  const { createEvent, events, fetchEvents, isLoading } = useEventStore();
   const { showToast } = useToast();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+
+  // 過去イベントからコピー
+  const [showCopyModal, setShowCopyModal] = useState(false);
 
   // スキルレベル設定の状態
   const [skillLevelEnabled, setSkillLevelEnabled] = useState(false);
@@ -86,10 +91,19 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
   const [showGenderDetails, setShowGenderDetails] = useState(false);
   const [genderOptions, setGenderOptions] = useState<GenderOption[]>(DEFAULT_GENDER_OPTIONS);
 
+  // 過去イベント一覧を取得（初回のみ）
+  useEffect(() => {
+    if (events.length === 0) {
+      fetchEvents();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const {
     control,
     handleSubmit,
     formState: { errors },
+    setValue,
   } = useForm<EventFormData>({
     resolver: zodResolver(eventSchema),
     defaultValues: {
@@ -101,6 +115,36 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
       password: '',
     },
   });
+
+  // 過去イベントからコピー
+  const handleCopyFromEvent = (event: Event) => {
+    setValue('name', event.name);
+    setValue('description', event.description || '');
+    setValue('location', event.location);
+    setValue('fee', event.fee?.toString() || '');
+    setValue('capacity', event.capacity?.toString() || '');
+    setValue('password', event.password || '');
+
+    // スキルレベル設定をコピー
+    if (event.skill_level_settings?.enabled) {
+      setSkillLevelEnabled(true);
+      setSkillLevelLabel(event.skill_level_settings.label || 'スキルレベル');
+      setSkillLevelOptions(event.skill_level_settings.options || DEFAULT_SKILL_LEVEL_OPTIONS);
+    } else {
+      setSkillLevelEnabled(false);
+    }
+
+    // 性別設定をコピー
+    if (event.gender_settings?.enabled) {
+      setGenderEnabled(true);
+      setGenderOptions(event.gender_settings.options || DEFAULT_GENDER_OPTIONS);
+    } else {
+      setGenderEnabled(false);
+    }
+
+    setShowCopyModal(false);
+    showToast('イベント設定をコピーしました', 'success');
+  };
 
   const formatDate = (date: Date): string => {
     const year = date.getFullYear();
@@ -191,7 +235,19 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: '100%' }]} />
           </View>
-          <Text style={styles.progressText}>新規イベント作成</Text>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressText}>新規イベント作成</Text>
+            {events.length > 0 && (
+              <TouchableOpacity
+                style={styles.copyFromEventButton}
+                onPress={() => setShowCopyModal(true)}
+                activeOpacity={0.7}
+              >
+                <Copy size={14} color={colors.primary} />
+                <Text style={styles.copyFromEventText}>過去のイベントからコピー</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {/* Section: Basic Info */}
@@ -647,6 +703,61 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
         onConfirm={handleTimeConfirm}
         onCancel={() => setShowTimePicker(false)}
       />
+
+      {/* Copy from Past Event Modal */}
+      <Modal
+        visible={showCopyModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCopyModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>過去のイベントからコピー</Text>
+              <TouchableOpacity
+                onPress={() => setShowCopyModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <X size={24} color={colors.gray[500]} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSubtitle}>
+              場所・参加費・オプション設定がコピーされます
+            </Text>
+            <FlatList
+              data={events}
+              keyExtractor={(item) => item.id}
+              style={styles.eventList}
+              renderItem={({ item }) => {
+                const { fullDate } = formatDateTime(item.date_time);
+                return (
+                  <TouchableOpacity
+                    style={styles.eventListItem}
+                    onPress={() => handleCopyFromEvent(item)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.eventListItemContent}>
+                      <Text style={styles.eventListItemName} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={styles.eventListItemMeta}>
+                        {fullDate} · {item.location}
+                      </Text>
+                    </View>
+                    <ChevronRight size={20} color={colors.gray[400]} />
+                  </TouchableOpacity>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={styles.emptyList}>
+                  <Text style={styles.emptyListText}>過去のイベントがありません</Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -678,6 +789,25 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.gray[500],
     fontWeight: '500',
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  copyFromEventButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.primarySoft,
+    borderRadius: borderRadius.md,
+  },
+  copyFromEventText: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.primary,
   },
   section: {
     marginBottom: spacing.md,
@@ -933,5 +1063,72 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     color: colors.gray[600],
     marginLeft: spacing.xs,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    maxHeight: '70%',
+    paddingBottom: spacing.xl,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[100],
+  },
+  modalTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  modalCloseButton: {
+    padding: spacing.xs,
+  },
+  modalSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  eventList: {
+    paddingHorizontal: spacing.lg,
+  },
+  eventListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[100],
+  },
+  eventListItemContent: {
+    flex: 1,
+  },
+  eventListItemName: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '500',
+    color: colors.gray[900],
+    marginBottom: 2,
+  },
+  eventListItemMeta: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+  },
+  emptyList: {
+    paddingVertical: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyListText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[400],
   },
 });

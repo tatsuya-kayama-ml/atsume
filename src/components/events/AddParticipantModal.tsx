@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,17 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  PanResponder,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { X, UserPlus, Check } from 'lucide-react-native';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { Button } from '../common';
 import { AttendanceStatus, PaymentStatus, GenderType, SkillLevelSettings, GenderSettings } from '../../types';
 import { logger } from '../../utils';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface AddParticipantModalProps {
   visible: boolean;
@@ -55,6 +60,97 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
   const [gender, setGender] = useState<GenderType | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Swipe-to-dismiss animation
+  const translateY = useRef(new Animated.Value(0)).current;
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      translateY.setValue(SCREEN_HEIGHT);
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.spring(translateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 11,
+        }),
+      ]).start();
+    }
+  }, [visible]);
+
+  const closeModal = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: SCREEN_HEIGHT,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setName('');
+      setAttendanceStatus('attending');
+      setPaymentStatus('unpaid');
+      setSkillLevel(undefined);
+      setGender(undefined);
+      onClose();
+      translateY.setValue(0);
+    });
+  }, [onClose]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && gestureState.dy > 0;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          translateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 100 || gestureState.vy > 0.5) {
+          Animated.parallel([
+            Animated.timing(translateY, {
+              toValue: SCREEN_HEIGHT,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(backdropOpacity, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ]).start(() => {
+            setName('');
+            setAttendanceStatus('attending');
+            setPaymentStatus('unpaid');
+            setSkillLevel(undefined);
+            setGender(undefined);
+            onClose();
+            translateY.setValue(0);
+          });
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            tension: 100,
+            friction: 10,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
   const handleAdd = async () => {
     if (!name.trim()) return;
 
@@ -80,19 +176,12 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
     }
   };
 
-  const handleClose = () => {
-    setName('');
-    setAttendanceStatus('attending');
-    setPaymentStatus('unpaid');
-    setSkillLevel(undefined);
-    setGender(undefined);
-    onClose();
-  };
+  const handleClose = closeModal;
 
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="none"
       transparent
       onRequestClose={handleClose}
     >
@@ -100,19 +189,30 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <View style={styles.headerIcon}>
-              <UserPlus size={20} color={colors.primary} />
+        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={handleClose}
+          />
+        </Animated.View>
+        <Animated.View style={[styles.container, { transform: [{ translateY }] }]}>
+          {/* Swipeable handle area */}
+          <View {...panResponder.panHandlers} style={styles.handleArea}>
+            <View style={styles.handle} />
+            <View style={styles.header}>
+              <View style={styles.headerIcon}>
+                <UserPlus size={20} color={colors.primary} />
+              </View>
+              <Text style={styles.title}>参加者を追加</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={handleClose}
+                activeOpacity={0.7}
+              >
+                <X size={24} color={colors.gray[500]} />
+              </TouchableOpacity>
             </View>
-            <Text style={styles.title}>参加者を追加</Text>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={handleClose}
-              activeOpacity={0.7}
-            >
-              <X size={24} color={colors.gray[500]} />
-            </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -280,7 +380,7 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
               style={styles.addButton}
             />
           </View>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -289,8 +389,11 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   container: {
     backgroundColor: colors.white,
@@ -298,6 +401,18 @@ const styles = StyleSheet.create({
     borderTopRightRadius: borderRadius['2xl'],
     maxHeight: '90%',
     ...shadows.lg,
+  },
+  handleArea: {
+    // Swipeable area
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    backgroundColor: colors.gray[300],
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   header: {
     flexDirection: 'row',
