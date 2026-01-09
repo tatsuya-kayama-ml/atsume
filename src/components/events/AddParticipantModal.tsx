@@ -35,10 +35,8 @@ interface AddParticipantModalProps {
 }
 
 const ATTENDANCE_OPTIONS: { value: AttendanceStatus; label: string; color: string }[] = [
-  { value: 'attending', label: '出席', color: colors.success },
+  { value: 'attending', label: '出席予定', color: colors.success },
   { value: 'maybe', label: '未定', color: colors.warning },
-  { value: 'not_attending', label: '欠席', color: colors.error },
-  { value: 'pending', label: '未回答', color: colors.gray[500] },
 ];
 
 const PAYMENT_OPTIONS: { value: PaymentStatus; label: string }[] = [
@@ -54,7 +52,7 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
   genderSettings,
 }) => {
   const [name, setName] = useState('');
-  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus>('attending');
+  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus>('unconfirmed');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('unpaid');
   const [skillLevel, setSkillLevel] = useState<number | undefined>(undefined);
   const [gender, setGender] = useState<GenderType | undefined>(undefined);

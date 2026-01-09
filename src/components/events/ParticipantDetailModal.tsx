@@ -40,10 +40,10 @@ interface ParticipantDetailModalProps {
 }
 
 const ATTENDANCE_OPTIONS: { value: AttendanceStatus; label: string; color: string }[] = [
-  { value: 'attending', label: '出席', color: colors.success },
+  { value: 'unconfirmed', label: '未確認', color: colors.gray[500] },
+  { value: 'attending', label: '出席予定', color: colors.success },
   { value: 'maybe', label: '未定', color: colors.warning },
   { value: 'not_attending', label: '欠席', color: colors.error },
-  { value: 'pending', label: '未回答', color: colors.gray[500] },
 ];
 
 const PAYMENT_OPTIONS: { value: PaymentStatus; label: string }[] = [
@@ -158,7 +158,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
 
   // Edit form state
   const [editName, setEditName] = useState('');
-  const [editAttendance, setEditAttendance] = useState<AttendanceStatus>('pending');
+  const [editAttendance, setEditAttendance] = useState<AttendanceStatus>('unconfirmed');
   const [editPayment, setEditPayment] = useState<PaymentStatus>('unpaid');
   const [editSkillLevel, setEditSkillLevel] = useState<number | undefined>(undefined);
   const [editGender, setEditGender] = useState<GenderType | undefined>(undefined);

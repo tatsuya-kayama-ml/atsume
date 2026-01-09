@@ -1,6 +1,6 @@
 // Supabase Database Types
 
-export type AttendanceStatus = 'pending' | 'attending' | 'not_attending' | 'maybe';
+export type AttendanceStatus = 'pending' | 'attending' | 'not_attending' | 'maybe' | 'unconfirmed';
 export type PaymentStatus = 'unpaid' | 'pending_confirmation' | 'paid';
 export type EventStatus = 'open' | 'completed'; // 実施予定 | 終了
 export type TournamentFormat =

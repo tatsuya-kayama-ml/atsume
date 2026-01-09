@@ -468,7 +468,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const attendingParticipants = participants.filter((p) => p.attendance_status === 'attending');
   const maybeParticipants = participants.filter((p) => p.attendance_status === 'maybe');
   const notAttendingParticipants = participants.filter((p) => p.attendance_status === 'not_attending');
-  const pendingParticipants = participants.filter((p) => p.attendance_status === 'pending');
+  const unconfirmedParticipants = participants.filter((p) => p.attendance_status === 'unconfirmed');
 
   return (
     <ScrollView
@@ -696,6 +696,10 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                   <Text style={[styles.attendanceStatValue, { color: colors.error }]}>{notAttendingParticipants.length}</Text>
                   <Text style={styles.attendanceStatLabel}>欠席</Text>
                 </View>
+                <View style={[styles.attendanceStatItem, { backgroundColor: colors.gray[100] }]}>
+                  <Text style={[styles.attendanceStatValue, { color: colors.gray[500] }]}>{unconfirmedParticipants.length}</Text>
+                  <Text style={styles.attendanceStatLabel}>未確認</Text>
+                </View>
               </View>
             </View>
             <View style={styles.attendanceStatsDivider} />
@@ -749,9 +753,9 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             </View>
             <View style={styles.summaryItem}>
               <View style={[styles.summaryIconCircle, { backgroundColor: colors.gray[100] }]}>
-                <Text style={[styles.summaryCount, { color: colors.gray[500] }]}>{pendingParticipants.length}</Text>
+                <Text style={[styles.summaryCount, { color: colors.gray[500] }]}>{unconfirmedParticipants.length}</Text>
               </View>
-              <Text style={styles.summaryLabel}>未回答</Text>
+              <Text style={styles.summaryLabel}>未確認</Text>
             </View>
           </View>
         </Card>
@@ -827,18 +831,18 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         </View>
       )}
 
-      {pendingParticipants.length > 0 && (
+      {unconfirmedParticipants.length > 0 && (
         <View style={styles.participantGroup}>
           <View style={styles.groupHeader}>
             <View style={[styles.groupIndicator, { backgroundColor: colors.gray[400] }]} />
-            <Text style={styles.groupTitle}>未回答</Text>
-            <Text style={styles.groupCount}>{pendingParticipants.length}人</Text>
+            <Text style={styles.groupTitle}>未確認</Text>
+            <Text style={styles.groupCount}>{unconfirmedParticipants.length}人</Text>
           </View>
-          {pendingParticipants.map((participant) => (
+          {unconfirmedParticipants.map((participant) => (
             <ParticipantCard
               key={participant.id}
               participant={participant}
-              status="pending"
+              status="unconfirmed"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
               checkInMode={isOrganizer}
