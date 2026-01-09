@@ -1005,7 +1005,6 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   // Payment link modal state
   const [showPaymentLinkModal, setShowPaymentLinkModal] = useState(false);
   const [paymentLinkInput, setPaymentLinkInput] = useState('');
-  const [paymentDetailsInput, setPaymentDetailsInput] = useState('');
   const [selectedPaymentType, setSelectedPaymentType] = useState<'paypay' | 'bank' | 'other'>('paypay');
   const [customLabelInput, setCustomLabelInput] = useState('');
   const [isSavingLink, setIsSavingLink] = useState(false);
@@ -1156,7 +1155,6 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   // Payment link handlers
   const handleOpenPaymentLinkModal = () => {
     setPaymentLinkInput(currentEvent?.payment_link || '');
-    setPaymentDetailsInput(currentEvent?.payment_details || '');
     const existingLabel = currentEvent?.payment_link_label || '';
 
     // Determine payment type from existing label
@@ -1189,23 +1187,11 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
     setIsSavingLink(true);
     try {
-      // PayPayの場合はURLリンクを保存、それ以外は詳細情報を保存
-      if (selectedPaymentType === 'paypay') {
-        await updateEvent(eventId, {
-          payment_link: paymentLinkInput.trim() || null,
-          payment_link_label: finalLabel,
-          payment_details: null, // PayPayの場合は詳細情報をクリア
-        });
-      } else {
-        await updateEvent(eventId, {
-          payment_link: null, // 銀行振込等の場合はURLをクリア
-          payment_link_label: finalLabel,
-          payment_details: paymentDetailsInput.trim() || null,
-        });
-      }
-      // updateEventが成功した場合、ローカルステートはすでに更新されている
+      await updateEvent(eventId, {
+        payment_link: paymentLinkInput.trim() || null,
+        payment_link_label: finalLabel,
+      });
       setShowPaymentLinkModal(false);
-      showToast('支払い情報を保存しました', 'success');
     } catch (error: any) {
       showToast(error.message || '保存に失敗しました', 'error');
     } finally {
@@ -1228,11 +1214,8 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               await updateEvent(eventId, {
                 payment_link: null,
                 payment_link_label: null,
-                payment_details: null,
               });
-              // updateEventが成功した場合、ローカルステートはすでに更新されている
               setShowPaymentLinkModal(false);
-              showToast('支払い情報を削除しました', 'success');
             } catch (error: any) {
               showToast(error.message || '削除に失敗しました', 'error');
             } finally {
@@ -1287,41 +1270,36 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             >
               <Edit size={16} color={colors.primary} />
               <Text style={styles.paymentLinkEditText}>
-                {(currentEvent?.payment_link || currentEvent?.payment_details) ? '編集' : '設定'}
+                {currentEvent?.payment_link ? '編集' : '設定'}
               </Text>
             </TouchableOpacity>
           </View>
 
           {currentEvent?.payment_link ? (
-            // PayPay等のURLリンクがある場合
-            <View style={styles.paymentLinkDisplay}>
-              <View style={styles.paymentLinkInfo}>
-                <Text style={styles.paymentLinkLabel}>
-                  {currentEvent.payment_link_label || '支払いリンク'}
-                </Text>
-                <Text style={styles.paymentLinkUrl} numberOfLines={1}>
-                  {currentEvent.payment_link}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.paymentLinkOpenButton}
-                onPress={handleOpenPaymentLink}
-                activeOpacity={0.7}
-              >
-                <ExternalLink size={16} color={colors.white} />
-              </TouchableOpacity>
-            </View>
-          ) : currentEvent?.payment_details ? (
-            // 銀行振込等の詳細情報がある場合
             <View style={styles.paymentLinkDisplay}>
               <View style={styles.paymentLinkInfo}>
                 <Text style={styles.paymentLinkLabel}>
                   {currentEvent.payment_link_label || '支払い情報'}
                 </Text>
-                <Text style={styles.paymentDetailsText}>
-                  {currentEvent.payment_details}
-                </Text>
+                {currentEvent.payment_link.startsWith('http') ? (
+                  <Text style={styles.paymentLinkUrl} numberOfLines={1}>
+                    {currentEvent.payment_link}
+                  </Text>
+                ) : (
+                  <Text style={styles.paymentDetailsText}>
+                    {currentEvent.payment_link}
+                  </Text>
+                )}
               </View>
+              {currentEvent.payment_link.startsWith('http') && (
+                <TouchableOpacity
+                  style={styles.paymentLinkOpenButton}
+                  onPress={handleOpenPaymentLink}
+                  activeOpacity={0.7}
+                >
+                  <ExternalLink size={16} color={colors.white} />
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             <View style={styles.paymentLinkEmpty}>
@@ -1358,27 +1336,6 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             </View>
             <ExternalLink size={20} color={colors.primary} />
           </TouchableOpacity>
-        </Card>
-      )}
-
-      {/* Payment Details Card (Participant - View for non-PayPay) */}
-      {!isOrganizer && !currentEvent?.payment_link && currentEvent?.payment_details && (
-        <Card variant="elevated" style={styles.paymentLinkCard}>
-          <View style={styles.paymentLinkHeader}>
-            <View style={styles.paymentLinkTitleRow}>
-              <CreditCard size={18} color={colors.primary} />
-              <Text style={styles.paymentLinkTitle}>支払い方法</Text>
-            </View>
-          </View>
-
-          <View style={styles.paymentDetailsContainer}>
-            <Text style={styles.paymentDetailsLabel}>
-              {currentEvent.payment_link_label || '支払い情報'}
-            </Text>
-            <Text style={styles.paymentDetailsContent} selectable>
-              {currentEvent.payment_details}
-            </Text>
-          </View>
         </Card>
       )}
 
@@ -1568,8 +1525,8 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                   </Text>
                   <TextInput
                     style={[styles.textInput, styles.textInputMultiline]}
-                    value={paymentDetailsInput}
-                    onChangeText={setPaymentDetailsInput}
+                    value={paymentLinkInput}
+                    onChangeText={setPaymentLinkInput}
                     placeholder={selectedPaymentType === 'bank'
                       ? "例:\n銀行名: ○○銀行\n支店名: △△支店\n口座種別: 普通\n口座番号: 1234567\n口座名義: ヤマダ タロウ"
                       : "支払い方法の詳細を入力してください"
@@ -1591,7 +1548,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             </View>
 
             <View style={styles.modalFooter}>
-              {(currentEvent?.payment_link || currentEvent?.payment_details) && (
+              {currentEvent?.payment_link && (
                 <TouchableOpacity
                   style={styles.modalDeleteButton}
                   onPress={handleRemovePaymentLink}
