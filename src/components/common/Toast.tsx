@@ -47,12 +47,12 @@ export const Toast: React.FC<ToastProps> = ({
       }
 
       // Slide in
-      translateY.value = withSpring(0, { damping: 15, stiffness: 200 });
+      translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
       opacity.value = withSpring(1);
 
       // Auto dismiss
       const timer = setTimeout(() => {
-        translateY.value = withSpring(-100, { damping: 15, stiffness: 200 });
+        translateY.value = withSpring(-100, { damping: 20, stiffness: 300 });
         opacity.value = withSpring(0, {}, () => {
           runOnJS(onDismiss)();
         });
