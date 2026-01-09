@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import { Event, EventParticipant, EventStatus, AttendanceStatus, PaymentStatus, SkillLevelSettings, GenderSettings, GenderType } from '../types';
-import { hashPassword, verifyPassword, logger } from '../utils';
+import { logger } from '../utils';
 
 interface EventState {
   events: Event[];
@@ -21,8 +21,8 @@ interface EventState {
 
   // Participant actions
   fetchParticipants: (eventId: string) => Promise<void>;
-  joinEvent: (eventId: string, code?: string, password?: string) => Promise<void>;
-  joinEventByCode: (code: string, password?: string) => Promise<void>;
+  joinEvent: (eventId: string) => Promise<void>;
+  joinEventByCode: (code: string) => Promise<void>;
   leaveEvent: (eventId: string) => Promise<void>;
   addManualParticipant: (eventId: string, name: string, options?: { attendanceStatus?: AttendanceStatus; paymentStatus?: PaymentStatus; skillLevel?: number; gender?: GenderType }) => Promise<void>;
   updateManualParticipant: (participantId: string, data: { display_name?: string; attendance_status?: AttendanceStatus; payment_status?: PaymentStatus; skill_level?: number; gender?: GenderType }) => Promise<void>;
@@ -38,7 +38,7 @@ interface EventState {
   bulkCheckIn: (participantIds: string[], attended: boolean) => Promise<void>;
 
   // Event lookup
-  findEventByCode: (code: string) => Promise<{ event: Event; needsPassword: boolean } | null>;
+  findEventByCode: (code: string) => Promise<{ event: Event } | null>;
 
   // Utility
   clearError: () => void;
@@ -52,7 +52,6 @@ interface CreateEventData {
   location: string;
   fee: number;
   capacity?: number;
-  password?: string;
   skill_level_settings?: SkillLevelSettings;
   gender_settings?: GenderSettings;
 }
@@ -156,9 +155,6 @@ export const useEventStore = create<EventState>((set, get) => ({
       const eventCode = generateEventCode();
       const inviteLink = `atsume://event/${eventCode}`;
 
-      // Hash password if provided
-      const passwordHash = data.password ? await hashPassword(data.password) : null;
-
       const insertData = {
         organizer_id: user.id,
         name: data.name,
@@ -168,8 +164,6 @@ export const useEventStore = create<EventState>((set, get) => ({
         fee: data.fee,
         capacity: data.capacity || null,
         event_code: eventCode,
-        password_hash: passwordHash,
-        password: data.password || null, // Store plain password for display to participants
         invite_link: inviteLink,
         status: 'open' as EventStatus,
         timer_position: 'bottom',
@@ -296,14 +290,14 @@ export const useEventStore = create<EventState>((set, get) => ({
     }
   },
 
-  joinEvent: async (eventId: string, _code?: string, password?: string) => {
+  joinEvent: async (eventId: string) => {
     try {
       set({ isLoading: true, error: null });
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('ログインしていません');
 
-      // Check if event exists and verify password if needed
+      // Check if event exists
       const { data: event, error: eventError } = await supabase
         .from('events')
         .select('*')
@@ -311,17 +305,6 @@ export const useEventStore = create<EventState>((set, get) => ({
         .single();
 
       if (eventError) throw new Error('イベントが見つかりません');
-
-      // Verify password if event has one
-      if (event.password_hash) {
-        if (!password) {
-          throw new Error('パスワードが必要です');
-        }
-        const isValidPassword = await verifyPassword(password, event.password_hash);
-        if (!isValidPassword) {
-          throw new Error('パスワードが正しくありません');
-        }
-      }
 
       // Check if already participating
       const { data: existing } = await supabase
@@ -367,7 +350,7 @@ export const useEventStore = create<EventState>((set, get) => ({
     }
   },
 
-  joinEventByCode: async (code: string, password?: string) => {
+  joinEventByCode: async (code: string) => {
     try {
       set({ isLoading: true, error: null });
 
@@ -381,7 +364,7 @@ export const useEventStore = create<EventState>((set, get) => ({
         throw new Error('イベントコードが見つかりません');
       }
 
-      await get().joinEvent(event.id, code, password);
+      await get().joinEvent(event.id);
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;
@@ -664,8 +647,6 @@ export const useEventStore = create<EventState>((set, get) => ({
         capacity: originalEvent.capacity,
         organizer_id: originalEvent.organizer_id,
         event_code: eventCode,
-        password_hash: originalEvent.password_hash,
-        password: originalEvent.password, // Copy plain password as well
         invite_link: inviteLink,
         status: 'open' as const,
         skill_level_settings: originalEvent.skill_level_settings,
@@ -783,10 +764,7 @@ export const useEventStore = create<EventState>((set, get) => ({
         return null;
       }
 
-      return {
-        event,
-        needsPassword: !!event.password_hash,
-      };
+      return { event };
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       return null;

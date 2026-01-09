@@ -20,7 +20,6 @@ export interface EventFormData {
   location: string;
   fee: number;
   capacity?: number;
-  password?: string;
 }
 
 // Navigation types
@@ -33,6 +32,7 @@ export type RootStackParamList = {
   EventCreate: undefined;
   EventEdit: { eventId: string };
   JoinEvent: { code?: string };
+  JoinEventCallback: { eventId: string; code?: string };
   ParticipantDetail: { participantId: string; eventId: string };
   TeamEdit: { eventId: string };
   MatchResult: { matchId: string };

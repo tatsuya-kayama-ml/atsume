@@ -175,14 +175,6 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
           }
         : null;
 
-      // Hash new password if provided, otherwise keep existing
-      let passwordHash: string | null = currentEvent?.password_hash || null;
-      let plainPassword: string | null = currentEvent?.password || null;
-      if (data.password) {
-        passwordHash = await hashPassword(data.password);
-        plainPassword = data.password; // Store plain password for display to participants
-      }
-
       const updateData = {
         name: data.name,
         description: data.description || null,
@@ -190,8 +182,6 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
         location: data.location,
         fee: data.fee ? Number(data.fee) : 0,
         capacity: data.capacity ? Number(data.capacity) : null,
-        password_hash: passwordHash,
-        password: plainPassword,
         skill_level_settings: skillSettings,
         gender_settings: genderSettingsData,
       };
@@ -377,30 +367,6 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
               />
             </View>
           </View>
-        </Card>
-
-        {/* Section: Password */}
-        <Card variant="default" style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Lock size={20} color={colors.gray[600]} style={styles.sectionIcon} />
-            <Text style={styles.sectionTitle}>セキュリティ</Text>
-          </View>
-
-          <Controller
-            control={control}
-            name="password"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <Input
-                label="参加パスワード（任意）"
-                placeholder={currentEvent?.password_hash ? '変更する場合は入力' : '設定なし'}
-                value={value}
-                onChangeText={onChange}
-                onBlur={onBlur}
-                hint="空欄の場合は現在の設定を維持します"
-                variant="filled"
-              />
-            )}
-          />
         </Card>
 
         {/* Section: Skill Level Option */}
