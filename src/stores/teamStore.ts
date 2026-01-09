@@ -52,7 +52,7 @@ const TEAM_COLORS = [
 
 // Team name generator
 const generateTeamName = (index: number): string => {
-  return String(index + 1);
+  return `チーム${index + 1}`;
 };
 
 // Shuffle array (Fisher-Yates)
@@ -395,26 +395,38 @@ export const useTeamStore = create<TeamState>((set, get) => ({
       // First, delete existing teams
       await get().deleteAllTeams(eventId);
 
-      // Build query based on target
-      let query = supabase
+      // Fetch participants with RSVP and attendance data
+      const { data: rawParticipants, error: participantsError } = await supabase
         .from('event_participants')
         .select(`
           *,
-          user:users(id, display_name, avatar_url, skill_level)
+          user:users(id, display_name, avatar_url, skill_level),
+          rsvp:event_rsvps(*),
+          attendance:event_attendances(*)
         `)
         .eq('event_id', eventId);
 
+      if (participantsError) throw participantsError;
+
+      // Transform to extract first element from arrays (Supabase returns arrays for one-to-many)
+      const allParticipants = (rawParticipants || []).map((p: any) => ({
+        ...p,
+        rsvp: Array.isArray(p.rsvp) ? p.rsvp[0] || null : p.rsvp,
+        attendance: Array.isArray(p.attendance) ? p.attendance[0] || null : p.attendance,
+      }));
+
+      // Filter based on target
+      let participants: EventParticipant[];
       if (target === 'checked_in') {
-        query = query.eq('check_in_status', 'checked_in');
+        // チェックイン済み = attendance.attended === true
+        participants = allParticipants.filter((p: any) => p.attendance?.attended === true);
       } else {
-        query = query.eq('attendance_status', 'attending');
+        // 出席予定 = rsvp.status === 'attending'
+        participants = allParticipants.filter((p: any) => p.rsvp?.status === 'attending');
       }
 
-      const { data: participants, error: participantsError } = await query;
-
-      if (participantsError) throw participantsError;
       if (!participants || participants.length === 0) {
-        throw new Error(target === 'checked_in' ? '来ている参加者がいません' : '参加予定者がいません');
+        throw new Error(target === 'checked_in' ? 'チェックイン済みの参加者がいません' : '出席予定の参加者がいません');
       }
 
       // Create teams

@@ -34,6 +34,9 @@ interface EventState {
 
   // RSVP actions (出席予定)
   updateRsvpStatus: (participantId: string, status: RsvpStatus) => Promise<void>;
+  closeRsvp: (eventId: string) => Promise<void>;
+  reopenRsvp: (eventId: string) => Promise<void>;
+  isRsvpClosed: (event: Event | null) => boolean;
 
   // Attendance actions (実際の出席)
   recordAttendance: (participantId: string, attended: boolean) => Promise<void>;
@@ -186,18 +189,32 @@ export const useEventStore = create<EventState>((set, get) => ({
       if (error) throw error;
 
       // 主催者を参加者として自動追加（支払い済み状態）
-      const { error: participantError } = await supabase
+      const { data: organizerParticipant, error: participantError } = await supabase
         .from('event_participants')
         .insert({
           event_id: event.id,
           user_id: user.id,
-          attendance_status: 'attending',
           payment_status: 'paid',
-        });
+        })
+        .select()
+        .single();
 
       if (participantError) {
         logger.warn('[EventStore] Failed to add organizer as participant:', participantError);
         // 参加者追加に失敗してもイベント作成は成功として扱う
+      } else if (organizerParticipant) {
+        // Create RSVP for organizer
+        const { error: rsvpError } = await supabase
+          .from('event_rsvps')
+          .insert({
+            event_id: event.id,
+            participant_id: organizerParticipant.id,
+            status: 'attending',
+          });
+
+        if (rsvpError) {
+          logger.warn('[EventStore] Failed to create RSVP for organizer:', rsvpError);
+        }
       }
 
       set((state) => ({
@@ -421,7 +438,7 @@ export const useEventStore = create<EventState>((set, get) => ({
     }
   },
 
-  addManualParticipant: async (eventId: string, name: string, options?: { attendanceStatus?: AttendanceStatus; paymentStatus?: PaymentStatus; skillLevel?: number; gender?: GenderType }) => {
+  addManualParticipant: async (eventId: string, name: string, options?: { rsvpStatus?: RsvpStatus; paymentStatus?: PaymentStatus; skillLevel?: number; gender?: GenderType }) => {
     try {
       set({ isLoading: true, error: null });
 
@@ -446,7 +463,6 @@ export const useEventStore = create<EventState>((set, get) => ({
           event_id: eventId,
           user_id: null,
           display_name: name,
-          attendance_status: options?.attendanceStatus || 'attending',
           payment_status: options?.paymentStatus || 'unpaid',
           skill_level: options?.skillLevel || null,
           gender: options?.gender || null,
@@ -457,8 +473,24 @@ export const useEventStore = create<EventState>((set, get) => ({
 
       if (error) throw error;
 
+      // Create RSVP record
+      const rsvpStatus = options?.rsvpStatus || 'attending';
+      const { data: rsvp, error: rsvpError } = await supabase
+        .from('event_rsvps')
+        .insert({
+          event_id: eventId,
+          participant_id: participant.id,
+          status: rsvpStatus,
+        })
+        .select()
+        .single();
+
+      if (rsvpError) {
+        logger.warn('[EventStore] Failed to create RSVP for manual participant:', rsvpError);
+      }
+
       set((state) => ({
-        participants: [...state.participants, { ...participant, user: null }],
+        participants: [...state.participants, { ...participant, user: null, rsvp: rsvp || null, attendance: null }],
         isLoading: false,
       }));
     } catch (error: any) {
@@ -467,7 +499,7 @@ export const useEventStore = create<EventState>((set, get) => ({
     }
   },
 
-  updateManualParticipant: async (participantId: string, data: { display_name?: string; attendance_status?: AttendanceStatus; payment_status?: PaymentStatus; skill_level?: number; gender?: GenderType }) => {
+  updateManualParticipant: async (participantId: string, data: { display_name?: string; payment_status?: PaymentStatus; skill_level?: number; gender?: GenderType }) => {
     try {
       set({ isLoading: true, error: null });
 
@@ -511,20 +543,57 @@ export const useEventStore = create<EventState>((set, get) => ({
     }
   },
 
-  updateAttendanceStatus: async (participantId: string, status: AttendanceStatus) => {
+  updateRsvpStatus: async (participantId: string, status: RsvpStatus) => {
     try {
       set({ isLoading: true, error: null });
 
-      const { error } = await supabase
-        .from('event_participants')
-        .update({ attendance_status: status })
-        .eq('id', participantId);
+      // Get participant to find event_id
+      const participant = get().participants.find(p => p.id === participantId);
+      if (!participant) throw new Error('参加者が見つかりません');
 
-      if (error) throw error;
+      // Check if RSVP exists
+      const { data: existingRsvp } = await supabase
+        .from('event_rsvps')
+        .select('id')
+        .eq('participant_id', participantId)
+        .single();
+
+      const now = new Date().toISOString();
+
+      if (existingRsvp) {
+        // Update existing RSVP
+        const { error } = await supabase
+          .from('event_rsvps')
+          .update({ status, responded_at: now })
+          .eq('participant_id', participantId);
+
+        if (error) throw error;
+      } else {
+        // Create new RSVP
+        const { error } = await supabase
+          .from('event_rsvps')
+          .insert({
+            event_id: participant.event_id,
+            participant_id: participantId,
+            status,
+            responded_at: now,
+          });
+
+        if (error) throw error;
+      }
 
       set((state) => ({
         participants: state.participants.map((p) =>
-          p.id === participantId ? { ...p, attendance_status: status } : p
+          p.id === participantId
+            ? {
+                ...p,
+                rsvp: {
+                  ...(p.rsvp || { id: '', event_id: p.event_id, participant_id: p.id, created_at: now, updated_at: now }),
+                  status,
+                  responded_at: now,
+                } as EventRsvp,
+              }
+            : p
         ),
         isLoading: false,
       }));
@@ -532,6 +601,81 @@ export const useEventStore = create<EventState>((set, get) => ({
       set({ error: error.message, isLoading: false });
       throw error;
     }
+  },
+
+  closeRsvp: async (eventId: string) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const now = new Date().toISOString();
+
+      const { error } = await supabase
+        .from('events')
+        .update({
+          rsvp_closed: true,
+          rsvp_closed_at: now,
+        })
+        .eq('id', eventId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        currentEvent: state.currentEvent
+          ? { ...state.currentEvent, rsvp_closed: true, rsvp_closed_at: now }
+          : null,
+        events: state.events.map((e) =>
+          e.id === eventId ? { ...e, rsvp_closed: true, rsvp_closed_at: now } : e
+        ),
+        isLoading: false,
+      }));
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  reopenRsvp: async (eventId: string) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const { error } = await supabase
+        .from('events')
+        .update({
+          rsvp_closed: false,
+          rsvp_closed_at: null,
+        })
+        .eq('id', eventId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        currentEvent: state.currentEvent
+          ? { ...state.currentEvent, rsvp_closed: false, rsvp_closed_at: null }
+          : null,
+        events: state.events.map((e) =>
+          e.id === eventId ? { ...e, rsvp_closed: false, rsvp_closed_at: null } : e
+        ),
+        isLoading: false,
+      }));
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  isRsvpClosed: (event: Event | null) => {
+    if (!event) return false;
+
+    // Manual close takes priority
+    if (event.rsvp_closed) return true;
+
+    // Check deadline
+    if (event.rsvp_deadline) {
+      const deadline = new Date(event.rsvp_deadline);
+      return new Date() > deadline;
+    }
+
+    return false;
   },
 
   updatePaymentStatus: async (participantId: string, status: PaymentStatus) => {
@@ -689,16 +833,32 @@ export const useEventStore = create<EventState>((set, get) => ({
       if (createError) throw createError;
 
       // 主催者を参加者として追加
-      const { error: participantError } = await supabase
+      const { data: organizerParticipant, error: participantError } = await supabase
         .from('event_participants')
         .insert({
           event_id: newEvent.id,
           user_id: newEvent.organizer_id,
-          attendance_status: 'attending',
           payment_status: 'paid',
-        });
+        })
+        .select()
+        .single();
 
       if (participantError) throw participantError;
+
+      // Create RSVP for organizer
+      if (organizerParticipant) {
+        const { error: rsvpError } = await supabase
+          .from('event_rsvps')
+          .insert({
+            event_id: newEvent.id,
+            participant_id: organizerParticipant.id,
+            status: 'attending',
+          });
+
+        if (rsvpError) {
+          logger.warn('[EventStore] Failed to create RSVP for organizer in duplicated event:', rsvpError);
+        }
+      }
 
       set((state) => ({
         events: [newEvent, ...state.events],
@@ -712,27 +872,63 @@ export const useEventStore = create<EventState>((set, get) => ({
     }
   },
 
-  checkInParticipant: async (participantId: string, attended: boolean | null) => {
+  recordAttendance: async (participantId: string, attended: boolean) => {
     try {
       set({ isLoading: true, error: null });
 
-      const now = attended !== null ? new Date().toISOString() : null;
+      const participant = get().participants.find(p => p.id === participantId);
+      if (!participant) throw new Error('参加者が見つかりません');
 
-      const { error } = await supabase
-        .from('event_participants')
-        .update({
-          actual_attendance: attended,
-          checked_in_at: now,
-        })
-        .eq('id', participantId);
+      const { data: { user } } = await supabase.auth.getUser();
+      const now = new Date().toISOString();
 
-      if (error) throw error;
+      // Check if attendance record exists
+      const { data: existingAttendance } = await supabase
+        .from('event_attendances')
+        .select('id')
+        .eq('participant_id', participantId)
+        .single();
 
-      // Update local state
+      let attendanceRecord: EventAttendance;
+
+      if (existingAttendance) {
+        // Update existing attendance
+        const { data, error } = await supabase
+          .from('event_attendances')
+          .update({
+            attended,
+            checked_in_at: now,
+            checked_in_by: user?.id || null,
+          })
+          .eq('participant_id', participantId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        attendanceRecord = data;
+      } else {
+        // Create new attendance record
+        const { data, error } = await supabase
+          .from('event_attendances')
+          .insert({
+            event_id: participant.event_id,
+            participant_id: participantId,
+            attended,
+            checked_in_at: now,
+            checked_in_by: user?.id || null,
+            check_in_method: 'manual',
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        attendanceRecord = data;
+      }
+
       set((state) => ({
         participants: state.participants.map((p) =>
           p.id === participantId
-            ? { ...p, actual_attendance: attended, checked_in_at: now }
+            ? { ...p, attendance: attendanceRecord }
             : p
         ),
         isLoading: false,
@@ -743,32 +939,81 @@ export const useEventStore = create<EventState>((set, get) => ({
     }
   },
 
-  bulkCheckIn: async (participantIds: string[], attended: boolean) => {
+  removeAttendance: async (participantId: string) => {
     try {
       set({ isLoading: true, error: null });
 
-      const now = new Date().toISOString();
-
-      // Update all participants at once
       const { error } = await supabase
-        .from('event_participants')
-        .update({
-          actual_attendance: attended,
-          checked_in_at: now,
-        })
-        .in('id', participantIds);
+        .from('event_attendances')
+        .delete()
+        .eq('participant_id', participantId);
 
       if (error) throw error;
 
-      // Update local state
       set((state) => ({
         participants: state.participants.map((p) =>
-          participantIds.includes(p.id)
-            ? { ...p, actual_attendance: attended, checked_in_at: now }
+          p.id === participantId
+            ? { ...p, attendance: undefined }
             : p
         ),
         isLoading: false,
       }));
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      throw error;
+    }
+  },
+
+  bulkRecordAttendance: async (participantIds: string[], attended: boolean) => {
+    try {
+      set({ isLoading: true, error: null });
+
+      const { data: { user } } = await supabase.auth.getUser();
+      const now = new Date().toISOString();
+      const participants = get().participants;
+
+      // Process each participant
+      for (const participantId of participantIds) {
+        const participant = participants.find(p => p.id === participantId);
+        if (!participant) continue;
+
+        // Check if attendance record exists
+        const { data: existingAttendance } = await supabase
+          .from('event_attendances')
+          .select('id')
+          .eq('participant_id', participantId)
+          .single();
+
+        if (existingAttendance) {
+          await supabase
+            .from('event_attendances')
+            .update({
+              attended,
+              checked_in_at: now,
+              checked_in_by: user?.id || null,
+            })
+            .eq('participant_id', participantId);
+        } else {
+          await supabase
+            .from('event_attendances')
+            .insert({
+              event_id: participant.event_id,
+              participant_id: participantId,
+              attended,
+              checked_in_at: now,
+              checked_in_by: user?.id || null,
+              check_in_method: 'manual',
+            });
+        }
+      }
+
+      // Refetch to get updated data
+      const currentEvent = get().currentEvent;
+      if (currentEvent) {
+        await get().fetchParticipants(currentEvent.id);
+      }
+
+      set({ isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
       throw error;

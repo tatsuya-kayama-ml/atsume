@@ -16,7 +16,7 @@ import {
 import { X, User, Check, Trash2, Edit3 } from 'lucide-react-native';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { Button, Avatar, Badge } from '../common';
-import { AttendanceStatus, PaymentStatus, GenderType, SkillLevelSettings, GenderSettings, EventParticipant } from '../../types';
+import { RsvpStatus, PaymentStatus, GenderType, SkillLevelSettings, GenderSettings, EventParticipant } from '../../types';
 import { confirmAlert } from '../../utils/alert';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -26,20 +26,21 @@ interface ParticipantDetailModalProps {
   onClose: () => void;
   participant: EventParticipant | null;
   isOrganizer: boolean;
+  isOwnParticipation?: boolean; // 自分自身の参加情報かどうか
   skillLevelSettings?: SkillLevelSettings | null;
   genderSettings?: GenderSettings | null;
   onUpdate: (participantId: string, data: {
     display_name?: string;
-    attendance_status?: AttendanceStatus;
     payment_status?: PaymentStatus;
     skill_level?: number;
     gender?: GenderType;
   }) => Promise<void>;
   onRemove: (participantId: string) => Promise<void>;
+  onUpdateRsvp?: (participantId: string, status: RsvpStatus) => Promise<void>;
   onCheckIn?: (participantId: string, attended: boolean | null) => Promise<void>;
 }
 
-const ATTENDANCE_OPTIONS: { value: AttendanceStatus; label: string; color: string }[] = [
+const RSVP_OPTIONS: { value: RsvpStatus; label: string; color: string }[] = [
   { value: 'unconfirmed', label: '未確認', color: colors.gray[500] },
   { value: 'attending', label: '出席予定', color: colors.success },
   { value: 'maybe', label: '未定', color: colors.warning },
@@ -63,12 +64,17 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
   onClose,
   participant,
   isOrganizer,
+  isOwnParticipation = false,
   skillLevelSettings,
   genderSettings,
   onUpdate,
   onRemove,
+  onUpdateRsvp,
   onCheckIn,
 }) => {
+  // 編集可能かどうか: 主催者は全て編集可能、参加者は自分の出欠のみ編集可能
+  const canEditAll = isOrganizer;
+  const canEditRsvp = isOrganizer || isOwnParticipation;
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -158,7 +164,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
 
   // Edit form state
   const [editName, setEditName] = useState('');
-  const [editAttendance, setEditAttendance] = useState<AttendanceStatus>('unconfirmed');
+  const [editRsvpStatus, setEditRsvpStatus] = useState<RsvpStatus>('unconfirmed');
   const [editPayment, setEditPayment] = useState<PaymentStatus>('unpaid');
   const [editSkillLevel, setEditSkillLevel] = useState<number | undefined>(undefined);
   const [editGender, setEditGender] = useState<GenderType | undefined>(undefined);
@@ -169,11 +175,11 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
     if (participant) {
       const displayName = participant.display_name || participant.user?.display_name || '';
       setEditName(displayName);
-      setEditAttendance(participant.attendance_status);
+      setEditRsvpStatus(participant.rsvp?.status || 'unconfirmed');
       setEditPayment(participant.payment_status);
       setEditSkillLevel(participant.skill_level ?? undefined);
       setEditGender(participant.gender ?? undefined);
-      setEditActualAttendance(participant.actual_attendance ?? null);
+      setEditActualAttendance(participant.attendance?.attended ?? null);
     }
   }, [participant]);
 
@@ -188,12 +194,10 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
     try {
       const updateData: {
         display_name?: string;
-        attendance_status?: AttendanceStatus;
         payment_status?: PaymentStatus;
         skill_level?: number;
         gender?: GenderType;
       } = {
-        attendance_status: editAttendance,
         payment_status: editPayment,
       };
 
@@ -212,8 +216,15 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
 
       await onUpdate(participant.id, updateData);
 
+      // Update RSVP status if changed
+      const currentRsvpStatus = participant.rsvp?.status || 'unconfirmed';
+      if (onUpdateRsvp && editRsvpStatus !== currentRsvpStatus) {
+        await onUpdateRsvp(participant.id, editRsvpStatus);
+      }
+
       // Update actual attendance if changed and onCheckIn is provided
-      if (onCheckIn && editActualAttendance !== participant.actual_attendance) {
+      const currentAttendance = participant.attendance?.attended ?? null;
+      if (onCheckIn && editActualAttendance !== currentAttendance) {
         await onCheckIn(participant.id, editActualAttendance);
       }
 
@@ -250,9 +261,9 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
 
   const handleClose = closeModal;
 
-  const getAttendanceConfig = (status: AttendanceStatus) => {
-    const option = ATTENDANCE_OPTIONS.find(o => o.value === status);
-    return option || { label: '不明', color: colors.gray[500] };
+  const getRsvpConfig = (status: RsvpStatus | undefined) => {
+    const option = RSVP_OPTIONS.find(o => o.value === status);
+    return option || { label: '未確認', color: colors.gray[500] };
   };
 
   const getPaymentConfig = (status: PaymentStatus) => {
@@ -268,7 +279,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
 
   if (!participant) return null;
 
-  const attendanceConfig = getAttendanceConfig(participant.attendance_status);
+  const rsvpConfig = getRsvpConfig(participant.rsvp?.status);
   const paymentConfig = getPaymentConfig(participant.payment_status);
 
   return (
@@ -325,9 +336,9 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                 <View style={styles.statusOverview}>
                   <View style={styles.statusItem}>
                     <Text style={styles.statusLabel}>出欠状況</Text>
-                    <View style={[styles.statusValue, { backgroundColor: attendanceConfig.color + '15' }]}>
-                      <Text style={[styles.statusValueText, { color: attendanceConfig.color }]}>
-                        {attendanceConfig.label}
+                    <View style={[styles.statusValue, { backgroundColor: rsvpConfig.color + '15' }]}>
+                      <Text style={[styles.statusValueText, { color: rsvpConfig.color }]}>
+                        {rsvpConfig.label}
                       </Text>
                     </View>
                   </View>
@@ -377,8 +388,8 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                   <View style={styles.infoSection}>
                     <Text style={styles.sectionTitle}>当日の出席</Text>
                     <Badge
-                      label={participant.actual_attendance === true ? '出席' : participant.actual_attendance === false ? '欠席' : '未確認'}
-                      color={participant.actual_attendance === true ? 'success' : participant.actual_attendance === false ? 'error' : 'default'}
+                      label={participant.attendance?.attended === true ? '出席' : participant.attendance?.attended === false ? '欠席' : '未確認'}
+                      color={participant.attendance?.attended === true ? 'success' : participant.attendance?.attended === false ? 'error' : 'default'}
                       size="md"
                     />
                   </View>
@@ -400,8 +411,8 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
             ) : (
               // Edit Mode
               <>
-                {/* Name (Manual Participants Only) */}
-                {isManual && (
+                {/* Name (Manual Participants Only - Organizer Only) */}
+                {isManual && canEditAll && (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>名前</Text>
                     <TextInput
@@ -414,71 +425,75 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                   </View>
                 )}
 
-                {/* Attendance Status */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>出欠状況</Text>
-                  <View style={styles.optionsRow}>
-                    {ATTENDANCE_OPTIONS.map((option) => (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[
-                          styles.optionButton,
-                          editAttendance === option.value && {
-                            backgroundColor: option.color + '15',
-                            borderColor: option.color,
-                          },
-                        ]}
-                        onPress={() => setEditAttendance(option.value)}
-                        activeOpacity={0.7}
-                      >
-                        {editAttendance === option.value && (
-                          <Check size={14} color={option.color} style={styles.checkIcon} />
-                        )}
-                        <Text
+                {/* RSVP Status - 参加者自身も編集可能 */}
+                {canEditRsvp && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionLabel}>出欠状況</Text>
+                    <View style={styles.optionsRow}>
+                      {RSVP_OPTIONS.map((option) => (
+                        <TouchableOpacity
+                          key={option.value}
                           style={[
-                            styles.optionText,
-                            editAttendance === option.value && { color: option.color, fontWeight: '600' },
+                            styles.optionButton,
+                            editRsvpStatus === option.value && {
+                              backgroundColor: option.color + '15',
+                              borderColor: option.color,
+                            },
                           ]}
+                          onPress={() => setEditRsvpStatus(option.value)}
+                          activeOpacity={0.7}
                         >
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                          {editRsvpStatus === option.value && (
+                            <Check size={14} color={option.color} style={styles.checkIcon} />
+                          )}
+                          <Text
+                            style={[
+                              styles.optionText,
+                              editRsvpStatus === option.value && { color: option.color, fontWeight: '600' },
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </View>
-                </View>
+                )}
 
-                {/* Payment Status */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>支払い状況</Text>
-                  <View style={styles.optionsRow}>
-                    {PAYMENT_OPTIONS.map((option) => (
-                      <TouchableOpacity
-                        key={option.value}
-                        style={[
-                          styles.optionButton,
-                          editPayment === option.value && styles.optionButtonActive,
-                        ]}
-                        onPress={() => setEditPayment(option.value)}
-                        activeOpacity={0.7}
-                      >
-                        {editPayment === option.value && (
-                          <Check size={14} color={colors.primary} style={styles.checkIcon} />
-                        )}
-                        <Text
+                {/* Payment Status - Organizer Only */}
+                {canEditAll && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionLabel}>支払い状況</Text>
+                    <View style={styles.optionsRow}>
+                      {PAYMENT_OPTIONS.map((option) => (
+                        <TouchableOpacity
+                          key={option.value}
                           style={[
-                            styles.optionText,
-                            editPayment === option.value && styles.optionTextActive,
+                            styles.optionButton,
+                            editPayment === option.value && styles.optionButtonActive,
                           ]}
+                          onPress={() => setEditPayment(option.value)}
+                          activeOpacity={0.7}
                         >
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                          {editPayment === option.value && (
+                            <Check size={14} color={colors.primary} style={styles.checkIcon} />
+                          )}
+                          <Text
+                            style={[
+                              styles.optionText,
+                              editPayment === option.value && styles.optionTextActive,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </View>
-                </View>
+                )}
 
-                {/* Actual Attendance */}
-                {onCheckIn && (
+                {/* Actual Attendance - Organizer Only */}
+                {onCheckIn && canEditAll && (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>当日の出席</Text>
                     <View style={styles.optionsRow}>
@@ -512,8 +527,8 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                   </View>
                 )}
 
-                {/* Skill Level */}
-                {skillLevelSettings?.enabled && skillLevelSettings.options && (
+                {/* Skill Level - Organizer Only */}
+                {canEditAll && skillLevelSettings?.enabled && skillLevelSettings.options && (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>
                       {skillLevelSettings.label || 'スキルレベル'}
@@ -546,8 +561,8 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                   </View>
                 )}
 
-                {/* Gender */}
-                {genderSettings?.enabled && genderSettings.options && (
+                {/* Gender - Organizer Only */}
+                {canEditAll && genderSettings?.enabled && genderSettings.options && (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>性別</Text>
                     <View style={styles.optionsRow}>
@@ -582,7 +597,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
           </ScrollView>
 
           {/* Footer Actions */}
-          {isOrganizer && (
+          {(isOrganizer || isOwnParticipation) && (
             <View style={styles.footer}>
               {!isEditing ? (
                 <>
@@ -593,14 +608,16 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                     icon={<Edit3 size={16} color={colors.primary} />}
                     style={styles.actionButton}
                   />
-                  <Button
-                    title="削除"
-                    variant="outline"
-                    onPress={handleRemove}
-                    icon={<Trash2 size={16} color={colors.error} />}
-                    style={styles.deleteButton}
-                    loading={isLoading}
-                  />
+                  {isOrganizer && (
+                    <Button
+                      title="削除"
+                      variant="outline"
+                      onPress={handleRemove}
+                      icon={<Trash2 size={16} color={colors.error} />}
+                      style={styles.deleteButton}
+                      loading={isLoading}
+                    />
+                  )}
                 </>
               ) : (
                 <>

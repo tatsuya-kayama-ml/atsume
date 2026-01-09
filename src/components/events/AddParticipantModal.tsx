@@ -16,7 +16,7 @@ import {
 import { X, UserPlus, Check } from 'lucide-react-native';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { Button } from '../common';
-import { AttendanceStatus, PaymentStatus, GenderType, SkillLevelSettings, GenderSettings } from '../../types';
+import { RsvpStatus, PaymentStatus, GenderType, SkillLevelSettings, GenderSettings } from '../../types';
 import { logger } from '../../utils';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -25,7 +25,7 @@ interface AddParticipantModalProps {
   visible: boolean;
   onClose: () => void;
   onAdd: (name: string, options: {
-    attendanceStatus: AttendanceStatus;
+    rsvpStatus: RsvpStatus;
     paymentStatus: PaymentStatus;
     skillLevel?: number;
     gender?: GenderType;
@@ -34,7 +34,7 @@ interface AddParticipantModalProps {
   genderSettings?: GenderSettings | null;
 }
 
-const ATTENDANCE_OPTIONS: { value: AttendanceStatus; label: string; color: string }[] = [
+const RSVP_OPTIONS: { value: RsvpStatus; label: string; color: string }[] = [
   { value: 'attending', label: '出席予定', color: colors.success },
   { value: 'maybe', label: '未定', color: colors.warning },
 ];
@@ -52,7 +52,7 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
   genderSettings,
 }) => {
   const [name, setName] = useState('');
-  const [attendanceStatus, setAttendanceStatus] = useState<AttendanceStatus>('unconfirmed');
+  const [rsvpStatus, setRsvpStatus] = useState<RsvpStatus>('attending');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('unpaid');
   const [skillLevel, setSkillLevel] = useState<number | undefined>(undefined);
   const [gender, setGender] = useState<GenderType | undefined>(undefined);
@@ -95,7 +95,7 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
       }),
     ]).start(() => {
       setName('');
-      setAttendanceStatus('attending');
+      setRsvpStatus('attending');
       setPaymentStatus('unpaid');
       setSkillLevel(undefined);
       setGender(undefined);
@@ -130,7 +130,7 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
             }),
           ]).start(() => {
             setName('');
-            setAttendanceStatus('attending');
+            setRsvpStatus('attending');
             setPaymentStatus('unpaid');
             setSkillLevel(undefined);
             setGender(undefined);
@@ -155,14 +155,14 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
     setIsLoading(true);
     try {
       await onAdd(name.trim(), {
-        attendanceStatus,
+        rsvpStatus,
         paymentStatus,
         skillLevel,
         gender,
       });
       // Reset form
       setName('');
-      setAttendanceStatus('attending');
+      setRsvpStatus('attending');
       setPaymentStatus('unpaid');
       setSkillLevel(undefined);
       setGender(undefined);
@@ -227,30 +227,30 @@ export const AddParticipantModal: React.FC<AddParticipantModalProps> = ({
               />
             </View>
 
-            {/* Attendance Status */}
+            {/* RSVP Status */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>出欠状況</Text>
               <View style={styles.optionsRow}>
-                {ATTENDANCE_OPTIONS.map((option) => (
+                {RSVP_OPTIONS.map((option) => (
                   <TouchableOpacity
                     key={option.value}
                     style={[
                       styles.optionButton,
-                      attendanceStatus === option.value && {
+                      rsvpStatus === option.value && {
                         backgroundColor: option.color + '15',
                         borderColor: option.color,
                       },
                     ]}
-                    onPress={() => setAttendanceStatus(option.value)}
+                    onPress={() => setRsvpStatus(option.value)}
                     activeOpacity={0.7}
                   >
-                    {attendanceStatus === option.value && (
+                    {rsvpStatus === option.value && (
                       <Check size={14} color={option.color} style={styles.checkIcon} />
                     )}
                     <Text
                       style={[
                         styles.optionText,
-                        attendanceStatus === option.value && { color: option.color, fontWeight: '600' },
+                        rsvpStatus === option.value && { color: option.color, fontWeight: '600' },
                       ]}
                     >
                       {option.label}

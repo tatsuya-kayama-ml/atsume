@@ -1,8 +1,11 @@
 // Supabase Database Types
 
-export type AttendanceStatus = 'pending' | 'attending' | 'not_attending' | 'maybe' | 'unconfirmed';
+export type RsvpStatus = 'pending' | 'attending' | 'not_attending' | 'maybe' | 'unconfirmed';
+/** @deprecated Use RsvpStatus instead */
+export type AttendanceStatus = RsvpStatus;
 export type PaymentStatus = 'unpaid' | 'pending_confirmation' | 'paid';
 export type EventStatus = 'open' | 'completed'; // 実施予定 | 終了
+export type CheckInMethod = 'manual' | 'qr_code' | 'auto';
 export type TournamentFormat =
   | 'single_elimination'      // シングルエリミネーション（従来のトーナメント）
   | 'double_elimination'      // ダブルエリミネーション
@@ -69,6 +72,34 @@ export interface Event {
   gender_settings: GenderSettings | null;
   payment_link: string | null; // 支払い情報（PayPay URLまたは銀行口座情報）
   payment_link_label: string | null; // 支払い情報のラベル（例: "PayPay", "銀行振込"）
+  rsvp_deadline: string | null; // 参加受付締切日時
+  rsvp_closed: boolean; // 参加受付締切フラグ（手動締切）
+  rsvp_closed_at: string | null; // 締切実行日時
+  created_at: string;
+  updated_at: string;
+}
+
+// RSVP (出席予定)
+export interface EventRsvp {
+  id: string;
+  event_id: string;
+  participant_id: string;
+  status: RsvpStatus;
+  responded_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Attendance (実際の出席)
+export interface EventAttendance {
+  id: string;
+  event_id: string;
+  participant_id: string;
+  attended: boolean;
+  checked_in_at: string | null;
+  checked_in_by: string | null;
+  check_in_method: CheckInMethod;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -77,21 +108,20 @@ export interface EventParticipant {
   id: string;
   event_id: string;
   user_id: string | null; // null for manual participants
-  attendance_status: AttendanceStatus;
   payment_status: PaymentStatus;
   payment_reported_at: string | null;
   payment_confirmed_at: string | null;
   payment_note: string | null; // 支払い報告時のメモ（例: PayPayで送りました、ユーザー名XXです）
   skill_level: number | null;
   gender: GenderType | null;
-  actual_attendance: boolean | null; // 実際の出席状況 (null=未確認, true=出席, false=欠席)
-  checked_in_at: string | null; // 出席確認日時
   created_at: string;
   updated_at: string;
   // Joined fields
   user?: User;
   display_name?: string; // 手動追加参加者用
   is_manual?: boolean; // 手動追加フラグ
+  rsvp?: EventRsvp; // 出席予定
+  attendance?: EventAttendance; // 実際の出席
 }
 
 export interface Team {
@@ -233,6 +263,16 @@ export interface Database {
         Row: EventParticipant;
         Insert: Omit<EventParticipant, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Omit<EventParticipant, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      event_rsvps: {
+        Row: EventRsvp;
+        Insert: Omit<EventRsvp, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<EventRsvp, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      event_attendances: {
+        Row: EventAttendance;
+        Insert: Omit<EventAttendance, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<EventAttendance, 'id' | 'created_at' | 'updated_at'>>;
       };
       teams: {
         Row: Team;

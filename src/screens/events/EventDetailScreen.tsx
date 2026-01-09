@@ -56,7 +56,7 @@ import { TeamsTab } from '../../components/teams';
 import { MatchesTab } from '../../components/matches';
 import { TimerTab } from '../../components/timer';
 import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
-import { RootStackParamList, EventTabParamList, AttendanceStatus, PaymentStatus, GenderType, EventParticipant } from '../../types';
+import { RootStackParamList, EventTabParamList, RsvpStatus, PaymentStatus, GenderType, EventParticipant } from '../../types';
 import { logger, formatDateTime } from '../../utils';
 
 const { width } = Dimensions.get('window');
@@ -100,7 +100,7 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     }
   };
 
-  const attendingCount = participants.filter((p) => p.attendance_status === 'attending').length;
+  const attendingCount = participants.filter((p) => p.rsvp?.status === 'attending').length;
   const paidCount = participants.filter((p) => p.payment_status === 'paid').length;
 
   const handleShare = async () => {
@@ -364,9 +364,9 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   );
 };
 
-// Participants Tab
-const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
-  const { participants, currentEvent, fetchParticipants, updateAttendanceStatus, updateParticipantProfile, addManualParticipant, checkInParticipant, updateManualParticipant, removeParticipant, isLoading } = useEventStore();
+// Registration Tab (参加受付)
+const RegistrationTab: React.FC<{ eventId: string }> = ({ eventId }) => {
+  const { participants, currentEvent, fetchParticipants, updateRsvpStatus, updateParticipantProfile, addManualParticipant, updateManualParticipant, removeParticipant, isLoading, isRsvpClosed } = useEventStore();
   const { user } = useAuthStore();
   const { showToast } = useToast();
   const [showAddModal, setShowAddModal] = React.useState(false);
@@ -382,8 +382,10 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const isOrganizer = currentEvent?.organizer_id === user?.id;
 
   // 参加者詳細モーダルを開く
+  // 主催者は全員の詳細を開ける、参加者は自分の詳細のみ開ける
   const handleOpenParticipantDetail = (participant: EventParticipant) => {
-    if (isOrganizer) {
+    const isOwnParticipation = participant.user_id === user?.id;
+    if (isOrganizer || isOwnParticipation) {
       setSelectedParticipant(participant);
       setShowDetailModal(true);
     }
@@ -392,7 +394,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   // 参加者情報を更新
   const handleUpdateParticipant = async (participantId: string, data: {
     display_name?: string;
-    attendance_status?: AttendanceStatus;
     payment_status?: PaymentStatus;
     skill_level?: number;
     gender?: GenderType;
@@ -420,7 +421,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const handleAddParticipant = async (
     name: string,
     options: {
-      attendanceStatus: AttendanceStatus;
+      rsvpStatus: RsvpStatus;
       paymentStatus: PaymentStatus;
       skillLevel?: number;
       gender?: GenderType;
@@ -434,7 +435,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     }
   };
 
-  const getStatusConfig = (status: AttendanceStatus): { color: 'success' | 'error' | 'warning' | 'default'; label: string; icon: string; colorValue: string } => {
+  const getStatusConfig = (status: RsvpStatus | undefined): { color: 'success' | 'error' | 'warning' | 'default'; label: string; icon: string; colorValue: string } => {
     switch (status) {
       case 'attending':
         return { color: 'success', label: '出席予定', icon: '✓', colorValue: colors.success };
@@ -449,28 +450,21 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     }
   };
 
-  const handleStatusChange = async (participantId: string, status: AttendanceStatus) => {
+  const handleStatusChange = async (participantId: string, status: RsvpStatus) => {
     try {
-      await updateAttendanceStatus(participantId, status);
+      await updateRsvpStatus(participantId, status);
     } catch (error: any) {
       Alert.alert('エラー', error.message);
     }
   };
 
-  const handleCheckIn = async (participantId: string, attended: boolean | null) => {
-    try {
-      await checkInParticipant(participantId, attended);
-    } catch (error: any) {
-      showToast(error.message || '出欠の記録に失敗しました', 'error');
-    }
-  };
-
   const myParticipation = participants.find((p) => p.user_id === user?.id);
+  const rsvpClosed = isRsvpClosed(currentEvent);
 
-  const attendingParticipants = participants.filter((p) => p.attendance_status === 'attending');
-  const maybeParticipants = participants.filter((p) => p.attendance_status === 'maybe');
-  const notAttendingParticipants = participants.filter((p) => p.attendance_status === 'not_attending');
-  const unconfirmedParticipants = participants.filter((p) => p.attendance_status === 'unconfirmed');
+  const attendingParticipants = participants.filter((p) => p.rsvp?.status === 'attending');
+  const maybeParticipants = participants.filter((p) => p.rsvp?.status === 'maybe');
+  const notAttendingParticipants = participants.filter((p) => p.rsvp?.status === 'not_attending');
+  const unconfirmedParticipants = participants.filter((p) => !p.rsvp || p.rsvp?.status === 'unconfirmed' || p.rsvp?.status === 'pending');
 
   return (
     <ScrollView
@@ -486,8 +480,26 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
       }
       showsVerticalScrollIndicator={false}
     >
+      {/* RSVP締切情報（締切済みの場合のみ表示） */}
+      {rsvpClosed && (
+        <View style={styles.rsvpClosedBanner}>
+          <Clock size={16} color={colors.gray[600]} />
+          <Text style={styles.rsvpClosedBannerText}>参加受付は締め切られています</Text>
+        </View>
+      )}
+
+      {/* 締切日時表示（設定されている場合） */}
+      {currentEvent?.rsvp_deadline && !rsvpClosed && (
+        <View style={styles.rsvpDeadlineBanner}>
+          <Clock size={16} color={colors.warning} />
+          <Text style={styles.rsvpDeadlineBannerText}>
+            締切: {formatDateTime(currentEvent.rsvp_deadline).fullDate} {formatDateTime(currentEvent.rsvp_deadline).time}
+          </Text>
+        </View>
+      )}
+
       {/* Join Event Card (Not Participating - Non-organizer) */}
-      {!myParticipation && !isOrganizer && (
+      {!myParticipation && !isOrganizer && !rsvpClosed && (
         <Card variant="elevated" style={styles.joinEventCard}>
           <View style={styles.joinEventIconContainer}>
             <UserPlus size={32} color={colors.primary} />
@@ -510,6 +522,20 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             fullWidth
             size="lg"
           />
+        </Card>
+      )}
+
+      {/* Closed Registration Notice (Not Participating - Non-organizer) */}
+      {!myParticipation && !isOrganizer && rsvpClosed && (
+        <Card variant="elevated" style={styles.closedRegistrationCard}>
+          <View style={[styles.joinEventIconContainer, { backgroundColor: colors.gray[100] }]}>
+            <Clock size={32} color={colors.gray[400]} />
+          </View>
+          <Text style={styles.closedRegistrationTitle}>参加受付は終了しました</Text>
+          <Text style={styles.closedRegistrationMessage}>
+            このイベントは参加受付を締め切りました。{'\n'}
+            参加をご希望の方は主催者にお問い合わせください。
+          </Text>
         </Card>
       )}
 
@@ -558,16 +584,16 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               )}
             </View>
             <Badge
-              label={getStatusConfig(myParticipation.attendance_status).label}
-              color={getStatusConfig(myParticipation.attendance_status).color}
+              label={getStatusConfig(myParticipation.rsvp?.status).label}
+              color={getStatusConfig(myParticipation.rsvp?.status).color}
               size="md"
             />
           </View>
 
           <View style={styles.statusButtonsContainer}>
-            {(['attending', 'maybe', 'not_attending'] as AttendanceStatus[]).map((status) => {
+            {(['attending', 'maybe', 'not_attending'] as RsvpStatus[]).map((status) => {
               const config = getStatusConfig(status);
-              const isSelected = myParticipation.attendance_status === status;
+              const isSelected = myParticipation.rsvp?.status === status;
               return (
                 <TouchableOpacity
                   key={status}
@@ -704,30 +730,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                 </View>
               </View>
             </View>
-            <View style={styles.attendanceStatsDivider} />
-            <View style={styles.attendanceStatsColumn}>
-              <Text style={styles.attendanceStatsTitle}>実際の出席</Text>
-              <View style={styles.attendanceStatsRow}>
-                <View style={[styles.attendanceStatItem, { backgroundColor: colors.successSoft }]}>
-                  <Text style={[styles.attendanceStatValue, { color: colors.success }]}>
-                    {participants.filter(p => p.actual_attendance === true).length}
-                  </Text>
-                  <Text style={styles.attendanceStatLabel}>出席</Text>
-                </View>
-                <View style={[styles.attendanceStatItem, { backgroundColor: colors.errorSoft }]}>
-                  <Text style={[styles.attendanceStatValue, { color: colors.error }]}>
-                    {participants.filter(p => p.actual_attendance === false).length}
-                  </Text>
-                  <Text style={styles.attendanceStatLabel}>欠席</Text>
-                </View>
-                <View style={[styles.attendanceStatItem, { backgroundColor: colors.gray[100] }]}>
-                  <Text style={[styles.attendanceStatValue, { color: colors.gray[500] }]}>
-                    {participants.filter(p => p.actual_attendance === null).length}
-                  </Text>
-                  <Text style={styles.attendanceStatLabel}>未確認</Text>
-                </View>
-              </View>
-            </View>
           </View>
         </>
       ) : (
@@ -778,8 +780,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="attending"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
-              checkInMode={isOrganizer}
-              onCheckIn={handleCheckIn}
               isOrganizer={isOrganizer}
               onPress={handleOpenParticipantDetail}
             />
@@ -801,8 +801,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="maybe"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
-              checkInMode={isOrganizer}
-              onCheckIn={handleCheckIn}
               isOrganizer={isOrganizer}
               onPress={handleOpenParticipantDetail}
             />
@@ -824,8 +822,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="not_attending"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
-              checkInMode={isOrganizer}
-              onCheckIn={handleCheckIn}
               isOrganizer={isOrganizer}
               onPress={handleOpenParticipantDetail}
             />
@@ -847,8 +843,6 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
               status="unconfirmed"
               skillLevelSettings={currentEvent?.skill_level_settings}
               genderSettings={currentEvent?.gender_settings}
-              checkInMode={isOrganizer}
-              onCheckIn={handleCheckIn}
               isOrganizer={isOrganizer}
               onPress={handleOpenParticipantDetail}
             />
@@ -874,11 +868,266 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         }}
         participant={selectedParticipant}
         isOrganizer={isOrganizer}
+        isOwnParticipation={selectedParticipant?.user_id === user?.id}
         skillLevelSettings={currentEvent?.skill_level_settings}
         genderSettings={currentEvent?.gender_settings}
         onUpdate={handleUpdateParticipant}
         onRemove={handleRemoveParticipant}
-        onCheckIn={handleCheckIn}
+        onUpdateRsvp={handleStatusChange}
+      />
+    </ScrollView>
+  );
+};
+
+// CheckIn Tab (チェックイン)
+const CheckInTab: React.FC<{ eventId: string }> = ({ eventId }) => {
+  const { participants, currentEvent, fetchParticipants, addManualParticipant, recordAttendance, removeAttendance, isLoading, closeRsvp, reopenRsvp, isRsvpClosed } = useEventStore();
+  const { user } = useAuthStore();
+  const { showToast } = useToast();
+  const [showAddModal, setShowAddModal] = React.useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchParticipants(eventId);
+    }, [eventId])
+  );
+
+  const isOrganizer = currentEvent?.organizer_id === user?.id;
+  const rsvpClosed = isRsvpClosed(currentEvent);
+
+  // 確定参加者: 出席予定の人 + 締切後に追加された人
+  const confirmedParticipants = participants.filter((p) =>
+    p.rsvp?.status === 'attending'
+  );
+
+  // チェックイン済み
+  const checkedInCount = confirmedParticipants.filter(p => p.attendance?.attended === true).length;
+  const notCheckedInCount = confirmedParticipants.filter(p => p.attendance?.attended === false).length;
+  const pendingCount = confirmedParticipants.filter(p => !p.attendance).length;
+
+  const handleCheckIn = async (participantId: string, attended: boolean | null) => {
+    try {
+      if (attended === null) {
+        await removeAttendance(participantId);
+      } else {
+        await recordAttendance(participantId, attended);
+      }
+    } catch (error: any) {
+      showToast(error.message || 'チェックインに失敗しました', 'error');
+    }
+  };
+
+  const handleAddWalkIn = async (
+    name: string,
+    options: {
+      rsvpStatus: RsvpStatus;
+      paymentStatus: PaymentStatus;
+      skillLevel?: number;
+      gender?: GenderType;
+    }
+  ) => {
+    try {
+      // 当日参加者は出席予定として追加し、同時にチェックインする
+      await addManualParticipant(eventId, name, {
+        ...options,
+        rsvpStatus: 'attending',
+      });
+      // 追加後に最新のparticipantsを取得してチェックイン
+      await fetchParticipants(eventId);
+      const newParticipant = useEventStore.getState().participants.find(
+        p => p.display_name === name && p.is_manual
+      );
+      if (newParticipant) {
+        await recordAttendance(newParticipant.id, true);
+      }
+      showToast(`${name}さんを追加し、チェックインしました`, 'success');
+    } catch (error: any) {
+      showToast(error.message || '追加に失敗しました', 'error');
+      throw error;
+    }
+  };
+
+  // 主催者のみ表示
+  if (!isOrganizer) {
+    return (
+      <View style={styles.tabContent}>
+        <View style={styles.emptyState}>
+          <Users size={48} color={colors.gray[300]} />
+          <Text style={styles.emptyStateTitle}>チェックイン機能</Text>
+          <Text style={styles.emptyStateMessage}>
+            チェックイン機能は主催者のみ使用できます
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={styles.tabContent}
+      contentContainerStyle={styles.tabContentContainer}
+      refreshControl={
+        <RefreshControl
+          refreshing={isLoading}
+          onRefresh={() => fetchParticipants(eventId)}
+          colors={[colors.primary]}
+          tintColor={colors.primary}
+        />
+      }
+      showsVerticalScrollIndicator={false}
+    >
+      {/* RSVP締切状態カード */}
+      <Card variant="elevated" style={styles.checkInStatusCard}>
+        <View style={styles.checkInStatusHeader}>
+          <View style={styles.checkInStatusTitleRow}>
+            <Text style={styles.checkInStatusTitle}>参加受付状態</Text>
+            <Badge
+              label={rsvpClosed ? '締切済み' : '受付中'}
+              color={rsvpClosed ? 'default' : 'success'}
+              size="md"
+            />
+          </View>
+          {currentEvent?.rsvp_deadline && (
+            <Text style={styles.checkInDeadlineText}>
+              締切日時: {formatDateTime(currentEvent.rsvp_deadline).fullDate} {formatDateTime(currentEvent.rsvp_deadline).time}
+            </Text>
+          )}
+        </View>
+        {!rsvpClosed ? (
+          <Button
+            title="参加受付を締め切る"
+            variant="outline"
+            onPress={async () => {
+              try {
+                await closeRsvp(eventId);
+                showToast('参加受付を締め切りました', 'success');
+              } catch (error: any) {
+                showToast(error.message || '締切に失敗しました', 'error');
+              }
+            }}
+            style={{ marginTop: spacing.md }}
+          />
+        ) : (
+          <Button
+            title="参加受付を再開する"
+            variant="outline"
+            onPress={async () => {
+              try {
+                await reopenRsvp(eventId);
+                showToast('参加受付を再開しました', 'success');
+              } catch (error: any) {
+                showToast(error.message || '再開に失敗しました', 'error');
+              }
+            }}
+            style={{ marginTop: spacing.md }}
+          />
+        )}
+      </Card>
+
+      {/* チェックイン統計 */}
+      <View style={styles.checkInStatsGrid}>
+        <View style={styles.checkInStatsHeader}>
+          <Text style={styles.checkInStatsHeaderTitle}>チェックイン状況</Text>
+          <Text style={styles.checkInStatsSubtitle}>
+            確定参加者: {confirmedParticipants.length}名
+          </Text>
+        </View>
+        <View style={styles.attendanceStatsDivider} />
+        <View style={styles.attendanceStatsRow}>
+          <View style={[styles.attendanceStatItem, { backgroundColor: colors.successSoft }]}>
+            <Text style={[styles.attendanceStatValue, { color: colors.success }]}>{checkedInCount}</Text>
+            <Text style={styles.attendanceStatLabel}>出席</Text>
+          </View>
+          <View style={[styles.attendanceStatItem, { backgroundColor: colors.errorSoft }]}>
+            <Text style={[styles.attendanceStatValue, { color: colors.error }]}>{notCheckedInCount}</Text>
+            <Text style={styles.attendanceStatLabel}>欠席</Text>
+          </View>
+          <View style={[styles.attendanceStatItem, { backgroundColor: colors.gray[100] }]}>
+            <Text style={[styles.attendanceStatValue, { color: colors.gray[500] }]}>{pendingCount}</Text>
+            <Text style={styles.attendanceStatLabel}>未確認</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* 当日参加者追加ボタン */}
+      <TouchableOpacity
+        style={styles.addWalkInButton}
+        onPress={() => setShowAddModal(true)}
+        activeOpacity={0.7}
+      >
+        <UserPlus size={20} color={colors.primary} />
+        <Text style={styles.addWalkInButtonText}>当日参加者を追加</Text>
+      </TouchableOpacity>
+
+      {/* 確定参加者リスト */}
+      {confirmedParticipants.length > 0 ? (
+        <View style={styles.participantGroup}>
+          <View style={styles.groupHeader}>
+            <View style={[styles.groupIndicator, { backgroundColor: colors.primary }]} />
+            <Text style={styles.groupTitle}>確定参加者</Text>
+            <Text style={styles.groupCount}>{confirmedParticipants.length}人</Text>
+          </View>
+          {confirmedParticipants.map((participant) => {
+            const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
+            const avatarUrl = participant.user?.avatar_url;
+            const isManual = participant.is_manual || !participant.user_id;
+            const actualAttendance = participant.attendance?.attended ?? null;
+
+            return (
+              <View key={participant.id} style={styles.checkInParticipantCard}>
+                <Avatar name={displayName} imageUrl={avatarUrl} size="md" />
+                <View style={styles.checkInParticipantInfo}>
+                  <View style={styles.participantNameRow}>
+                    <Text style={styles.participantName}>{displayName}</Text>
+                    {isManual && (
+                      <Badge label="手動" color="default" size="sm" variant="soft" />
+                    )}
+                  </View>
+                </View>
+                <View style={styles.checkInButtonGroup}>
+                  <TouchableOpacity
+                    style={[
+                      styles.checkInActionButton,
+                      actualAttendance === true && styles.checkInActionButtonActive,
+                    ]}
+                    onPress={() => handleCheckIn(participant.id, actualAttendance === true ? null : true)}
+                    activeOpacity={0.7}
+                  >
+                    <Check size={18} color={actualAttendance === true ? colors.white : colors.success} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.checkInActionButton,
+                      styles.checkInActionButtonAbsent,
+                      actualAttendance === false && styles.checkInActionButtonAbsentActive,
+                    ]}
+                    onPress={() => handleCheckIn(participant.id, actualAttendance === false ? null : false)}
+                    activeOpacity={0.7}
+                  >
+                    <X size={18} color={actualAttendance === false ? colors.white : colors.error} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      ) : (
+        <View style={styles.emptyState}>
+          <Users size={48} color={colors.gray[300]} />
+          <Text style={styles.emptyStateTitle}>確定参加者がいません</Text>
+          <Text style={styles.emptyStateMessage}>
+            「参加受付」タブで出席予定の参加者がいると、ここに表示されます
+          </Text>
+        </View>
+      )}
+
+      {/* Add Walk-in Participant Modal */}
+      <AddParticipantModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={handleAddWalkIn}
+        skillLevelSettings={currentEvent?.skill_level_settings}
+        genderSettings={currentEvent?.gender_settings}
       />
     </ScrollView>
   );
@@ -887,7 +1136,7 @@ const ParticipantsTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 // Participant Card Component
 const ParticipantCard: React.FC<{
   participant: any;
-  status: AttendanceStatus;
+  status: RsvpStatus;
   skillLevelSettings?: any;
   genderSettings?: any;
   checkInMode?: boolean;
@@ -899,7 +1148,7 @@ const ParticipantCard: React.FC<{
   const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
   const avatarUrl = participant.user?.avatar_url;
   const isManual = participant.is_manual || !participant.user_id;
-  const actualAttendance = participant.actual_attendance;
+  const actualAttendance = participant.attendance?.attended ?? null;
 
   // Get skill level label
   const skillLevelLabel = skillLevelSettings?.enabled && participant.skill_level
@@ -1106,7 +1355,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const isOrganizer = currentEvent?.organizer_id === user?.id;
   const myParticipation = participants.find((p) => p.user_id === user?.id);
 
-  const attendingParticipants = participants.filter((p) => p.attendance_status === 'attending');
+  const attendingParticipants = participants.filter((p) => p.rsvp?.status === 'attending');
   const totalExpected = currentEvent ? attendingParticipants.length * currentEvent.fee : 0;
   const paidParticipants = participants.filter((p) => p.payment_status === 'paid');
   const totalCollected = currentEvent ? paidParticipants.length * currentEvent.fee : 0;
@@ -1715,17 +1964,17 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
       )}
 
       {/* Unpaid */}
-      {participants.filter((p) => p.payment_status === 'unpaid' && p.attendance_status === 'attending').length > 0 && (
+      {participants.filter((p) => p.payment_status === 'unpaid' && p.rsvp?.status === 'attending').length > 0 && (
         <View style={styles.paymentGroup}>
           <View style={styles.paymentGroupHeader}>
             <View style={[styles.groupIndicator, { backgroundColor: colors.gray[400] }]} />
             <Text style={styles.paymentGroupTitle}>未払い</Text>
             <Text style={styles.paymentGroupCount}>
-              {participants.filter((p) => p.payment_status === 'unpaid' && p.attendance_status === 'attending').length}人
+              {participants.filter((p) => p.payment_status === 'unpaid' && p.rsvp?.status === 'attending').length}人
             </Text>
           </View>
           {participants
-            .filter((p) => p.payment_status === 'unpaid' && p.attendance_status === 'attending')
+            .filter((p) => p.payment_status === 'unpaid' && p.rsvp?.status === 'attending')
             .map((participant) => {
               const displayName = participant.display_name || participant.user?.display_name || '名前未設定';
               const avatarUrl = participant.user?.avatar_url;
@@ -2030,8 +2279,11 @@ export const EventDetailScreen: React.FC<Props> = ({ navigation, route }) => {
         <Tab.Screen name="Info" options={{ title: '情報' }}>
           {() => <EventInfoTab eventId={eventId} />}
         </Tab.Screen>
-        <Tab.Screen name="Participants" options={{ title: '参加者' }}>
-          {() => <ParticipantsTab eventId={eventId} />}
+        <Tab.Screen name="Registration" options={{ title: '参加受付' }}>
+          {() => <RegistrationTab eventId={eventId} />}
+        </Tab.Screen>
+        <Tab.Screen name="CheckIn" options={{ title: 'チェックイン' }}>
+          {() => <CheckInTab eventId={eventId} />}
         </Tab.Screen>
         <Tab.Screen name="Payment" options={{ title: '集金' }}>
           {() => <PaymentTab eventId={eventId} />}
@@ -3549,5 +3801,176 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: spacing.sm,
     marginBottom: spacing.xs,
+  },
+
+  // CheckIn Tab Styles
+  checkInStatusCard: {
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  checkInStatusHeader: {
+    marginBottom: spacing.sm,
+  },
+  checkInStatusTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  checkInStatusTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  checkInDeadlineText: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+  },
+  checkInStatsGrid: {
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    ...shadows.sm,
+  },
+  checkInStatsHeader: {
+    marginBottom: spacing.xs,
+  },
+  checkInStatsHeaderTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  checkInStatsSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    marginTop: spacing.xs,
+  },
+  addWalkInButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  addWalkInButtonText: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  checkInParticipantCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    ...shadows.xs,
+  },
+  checkInParticipantInfo: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  checkInButtonGroup: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  checkInActionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.full,
+    borderWidth: 2,
+    borderColor: colors.success,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkInActionButtonActive: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
+  },
+  checkInActionButtonAbsent: {
+    borderColor: colors.error,
+  },
+  checkInActionButtonAbsentActive: {
+    backgroundColor: colors.error,
+    borderColor: colors.error,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing['2xl'],
+    paddingHorizontal: spacing.lg,
+  },
+  emptyStateTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[700],
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  emptyStateMessage: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    marginTop: spacing.xs,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  // RSVP Deadline Banners
+  rsvpClosedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.gray[100],
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  rsvpClosedBannerText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '500',
+    color: colors.gray[600],
+  },
+  rsvpDeadlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.warningSoft,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  rsvpDeadlineBannerText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '500',
+    color: colors.warning,
+  },
+
+  // Closed Registration Card
+  closedRegistrationCard: {
+    padding: spacing.xl,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  closedRegistrationTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: '600',
+    color: colors.gray[700],
+    marginTop: spacing.md,
+    textAlign: 'center',
+  },
+  closedRegistrationMessage: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    marginTop: spacing.sm,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

@@ -47,7 +47,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // チーム分け対象の選択: 'attending' = 参加予定者, 'checked_in' = 来ている参加者
+  // チーム分け対象の選択: 'attending' = 出席予定, 'checked_in' = チェックイン済み
   const [assignTarget, setAssignTarget] = useState<'attending' | 'checked_in'>('attending');
 
   // チーム名編集用state
@@ -72,16 +72,21 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
   // イベントの設定を確認
   const hasSkillSettings = currentEvent?.skill_level_settings?.enabled ?? false;
   const hasGenderSettings = currentEvent?.gender_settings?.enabled ?? false;
-  const attendingParticipants = participants.filter((p) => p.attendance_status === 'attending');
-  const checkedInParticipants = participants.filter((p) => p.checked_in_at !== null);
+  // 出席予定の参加者（RSVPステータスがattending）
+  const attendingParticipants = participants.filter((p) => p.rsvp?.status === 'attending');
+  // チェックイン済みの参加者（attendanceテーブルでattended=true）
+  const checkedInParticipants = participants.filter((p) => p.attendance?.attended === true);
 
   // 既にチームに割り当てられているparticipant IDのセット
   const assignedParticipantIds = new Set(
     teams.flatMap((t) => t.members.map((m) => m.participant_id))
   );
 
-  // 未割り当ての参加者
-  const unassignedParticipants = attendingParticipants.filter(
+  // 対象の参加者リスト（チーム分け対象に応じて切り替え）
+  const targetParticipants = assignTarget === 'checked_in' ? checkedInParticipants : attendingParticipants;
+
+  // 未割り当ての参加者（対象に応じて変更）
+  const unassignedParticipants = targetParticipants.filter(
     (p) => !assignedParticipantIds.has(p.id)
   );
 
@@ -127,7 +132,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
 
   const handleAutoAssign = async () => {
     const targetParticipants = assignTarget === 'checked_in' ? checkedInParticipants : attendingParticipants;
-    const targetLabel = assignTarget === 'checked_in' ? '来ている参加者' : '参加予定者';
+    const targetLabel = assignTarget === 'checked_in' ? 'チェックイン済み' : '出席予定';
 
     if (targetParticipants.length === 0) {
       showAlert('エラー', `${targetLabel}がいません`);
@@ -328,7 +333,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                       assignTarget === 'attending' && styles.targetOptionTextSelected,
                     ]}
                   >
-                    参加予定 ({attendingParticipants.length})
+                    出席予定 ({attendingParticipants.length})
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -344,7 +349,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                       assignTarget === 'checked_in' && styles.targetOptionTextSelected,
                     ]}
                   >
-                    来ている人 ({checkedInParticipants.length})
+                    チェックイン済み ({checkedInParticipants.length})
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -487,7 +492,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                         assignTarget === 'attending' && styles.targetOptionTextSelected,
                       ]}
                     >
-                      参加予定 ({attendingParticipants.length})
+                      出席予定 ({attendingParticipants.length})
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -503,7 +508,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
                         assignTarget === 'checked_in' && styles.targetOptionTextSelected,
                       ]}
                     >
-                      来ている人 ({checkedInParticipants.length})
+                      チェックイン済み ({checkedInParticipants.length})
                     </Text>
                   </TouchableOpacity>
                 </View>
