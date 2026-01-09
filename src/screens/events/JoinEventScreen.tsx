@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,43 +6,58 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { Ticket, Calendar, MapPin, Users, Mail, ArrowLeft, CheckCircle } from 'lucide-react-native';
+import { Ticket, Calendar, MapPin, Users, ArrowLeft, CheckCircle } from 'lucide-react-native';
 import { Button, Input, Card } from '../../components/common';
 import { useEventStore } from '../../stores/eventStore';
+import { useAuthStore } from '../../stores/authStore';
 import { useToast } from '../../contexts/ToastContext';
-import { colors, spacing, typography, borderRadius } from '../../constants/theme';
+import { colors, spacing, typography } from '../../constants/theme';
 import { RootStackParamList, Event } from '../../types';
-import { supabase } from '../../services/supabase';
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList, 'JoinEvent'>;
   route: RouteProp<RootStackParamList, 'JoinEvent'>;
 }
 
-type Step = 'code' | 'confirm' | 'email' | 'sent';
-
-// Get redirect URL for magic link
-const getMagicLinkRedirectUrl = (eventId: string, eventCode: string): string => {
-  if (Platform.OS === 'web') {
-    return typeof window !== 'undefined'
-      ? `${window.location.origin}/join-event-callback?eventId=${eventId}&code=${eventCode}`
-      : `http://localhost:8081/join-event-callback?eventId=${eventId}&code=${eventCode}`;
-  }
-  return `atsume://join-event-callback?eventId=${eventId}&code=${eventCode}`;
-};
+type Step = 'code' | 'confirm' | 'success';
 
 export const JoinEventScreen: React.FC<Props> = ({ navigation, route }) => {
   const initialCode = route.params?.code || '';
   const [eventCode, setEventCode] = useState(initialCode);
-  const [email, setEmail] = useState('');
-  const [step, setStep] = useState<Step>('code');
+  const [step, setStep] = useState<Step>(initialCode ? 'confirm' : 'code');
   const [foundEvent, setFoundEvent] = useState<Event | null>(null);
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
-  const { findEventByCode, isLoading } = useEventStore();
+  const [isJoining, setIsJoining] = useState(false);
+  const [isSearching, setIsSearching] = useState(!!initialCode);
+  const { findEventByCode, joinEvent, isLoading } = useEventStore();
+  const { user } = useAuthStore();
   const { showToast } = useToast();
+
+  // URLパラメータからコードが渡された場合、自動でイベントを検索
+  useEffect(() => {
+    if (initialCode) {
+      handleSearchByCode(initialCode);
+    }
+  }, [initialCode]);
+
+  const handleSearchByCode = async (code: string) => {
+    setIsSearching(true);
+    const result = await findEventByCode(code.trim().toUpperCase());
+
+    if (!result) {
+      showToast('イベントコードが見つかりません', 'error');
+      setStep('code');
+      setIsSearching(false);
+      return;
+    }
+
+    setFoundEvent(result.event);
+    setStep('confirm');
+    setIsSearching(false);
+  };
 
   const handleSearch = async () => {
     if (!eventCode.trim()) {
@@ -50,73 +65,50 @@ export const JoinEventScreen: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
-    const result = await findEventByCode(eventCode.trim().toUpperCase());
-
-    if (!result) {
-      showToast('イベントコードが見つかりません', 'error');
-      return;
-    }
-
-    setFoundEvent(result.event);
-    setStep('confirm');
+    await handleSearchByCode(eventCode);
   };
 
-  const handleProceedToEmail = () => {
-    setStep('email');
-  };
-
-  const handleSendMagicLink = async () => {
+  const handleJoin = async () => {
     if (!foundEvent) return;
 
-    if (!email.trim()) {
-      showToast('メールアドレスを入力してください', 'warning');
+    if (!user) {
+      showToast('参加するにはログインが必要です', 'warning');
+      navigation.navigate('Auth');
       return;
     }
 
-    // Simple email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
-      showToast('有効なメールアドレスを入力してください', 'error');
-      return;
-    }
-
-    setIsSendingEmail(true);
+    setIsJoining(true);
 
     try {
-      const redirectUrl = getMagicLinkRedirectUrl(foundEvent.id, eventCode);
-
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            event_id: foundEvent.id,
-            event_code: eventCode,
-            action: 'join_event',
-          },
-        },
-      });
-
-      if (error) throw error;
-
-      setStep('sent');
+      await joinEvent(foundEvent.id);
+      setStep('success');
     } catch (error: any) {
-      showToast(error.message || 'メール送信に失敗しました', 'error');
+      if (error.message === 'すでにこのイベントに参加しています') {
+        showToast('すでにこのイベントに参加しています', 'info');
+        // 参加済みの場合はイベント詳細に遷移
+        navigation.replace('EventDetail', { eventId: foundEvent.id });
+      } else {
+        showToast(error.message || 'イベントへの参加に失敗しました', 'error');
+      }
     } finally {
-      setIsSendingEmail(false);
+      setIsJoining(false);
     }
   };
 
   const handleBack = () => {
-    if (step === 'confirm') {
-      setStep('code');
-      setFoundEvent(null);
-    } else if (step === 'email') {
-      setStep('confirm');
-      setEmail('');
-    } else if (step === 'sent') {
-      setStep('email');
+    setStep('code');
+    setFoundEvent(null);
+    setEventCode('');
+  };
+
+  const handleGoToEvent = () => {
+    if (foundEvent) {
+      navigation.replace('EventDetail', { eventId: foundEvent.id });
     }
+  };
+
+  const handleGoHome = () => {
+    navigation.goBack();
   };
 
   const formatDate = (dateString: string) => {
@@ -130,6 +122,16 @@ export const JoinEventScreen: React.FC<Props> = ({ navigation, route }) => {
       minute: '2-digit',
     });
   };
+
+  // ローディング中（URLからのコード検索）
+  if (isSearching) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>イベントを検索しています...</Text>
+      </View>
+    );
+  }
 
   // Step 1: イベントコード入力
   if (step === 'code') {
@@ -169,7 +171,7 @@ export const JoinEventScreen: React.FC<Props> = ({ navigation, route }) => {
           />
 
           <Text style={styles.hint}>
-            コードは主催者からの招待メッセージに記載されています
+            コードは主催者からの招待リンクまたはメッセージに記載されています
           </Text>
         </View>
       </KeyboardAvoidingView>
@@ -184,10 +186,12 @@ export const JoinEventScreen: React.FC<Props> = ({ navigation, route }) => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.content}>
-          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-            <ArrowLeft size={20} color={colors.gray[600]} />
-            <Text style={styles.backButtonText}>戻る</Text>
-          </TouchableOpacity>
+          {!initialCode && (
+            <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+              <ArrowLeft size={20} color={colors.gray[600]} />
+              <Text style={styles.backButtonText}>戻る</Text>
+            </TouchableOpacity>
+          )}
 
           <Text style={styles.title}>イベント確認</Text>
           <Text style={styles.subtitle}>
@@ -231,66 +235,22 @@ export const JoinEventScreen: React.FC<Props> = ({ navigation, route }) => {
 
           <Button
             title="参加する"
-            onPress={handleProceedToEmail}
+            onPress={handleJoin}
+            loading={isJoining}
             fullWidth
           />
+
+          {!user && (
+            <Text style={styles.loginHint}>
+              参加するにはログインが必要です
+            </Text>
+          )}
         </View>
       </KeyboardAvoidingView>
     );
   }
 
-  // Step 3: メールアドレス入力
-  if (step === 'email') {
-    return (
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <View style={styles.content}>
-          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-            <ArrowLeft size={20} color={colors.gray[600]} />
-            <Text style={styles.backButtonText}>戻る</Text>
-          </TouchableOpacity>
-
-          <View style={styles.iconContainer}>
-            <Mail size={40} color={colors.primary} />
-          </View>
-
-          <Text style={styles.title}>メールアドレスを入力</Text>
-          <Text style={styles.subtitle}>
-            参加確認のためのリンクをメールでお送りします
-          </Text>
-
-          <View style={styles.inputContainer}>
-            <Input
-              label="メールアドレス"
-              placeholder="example@email.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              containerStyle={styles.emailInput}
-            />
-          </View>
-
-          <Button
-            title="確認メールを送信"
-            onPress={handleSendMagicLink}
-            loading={isSendingEmail}
-            fullWidth
-            disabled={!email.trim()}
-          />
-
-          <Text style={styles.hint}>
-            メールに届くリンクをクリックすると参加が確定します
-          </Text>
-        </View>
-      </KeyboardAvoidingView>
-    );
-  }
-
-  // Step 4: メール送信完了
+  // Step 3: 参加成功
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -301,44 +261,23 @@ export const JoinEventScreen: React.FC<Props> = ({ navigation, route }) => {
           <CheckCircle size={40} color={colors.success} />
         </View>
 
-        <Text style={styles.title}>メールを送信しました</Text>
+        <Text style={styles.title}>参加完了!</Text>
         <Text style={styles.subtitle}>
-          {email} に確認メールを送信しました。{'\n'}
-          メール内のリンクをクリックして参加を確定してください。
+          {foundEvent?.name || 'イベント'}に参加しました
         </Text>
 
-        <Card variant="default" style={styles.infoCard}>
-          <Text style={styles.infoTitle}>メールが届かない場合</Text>
-          <Text style={styles.infoText}>
-            • 迷惑メールフォルダをご確認ください{'\n'}
-            • メールアドレスが正しいかご確認ください{'\n'}
-            • 数分経っても届かない場合は再送信してください
-          </Text>
-        </Card>
-
         <Button
-          title="メールを再送信"
-          onPress={handleSendMagicLink}
-          loading={isSendingEmail}
+          title="イベントを見る"
+          onPress={handleGoToEvent}
           fullWidth
-          variant="outline"
+          style={styles.button}
         />
-
-        <TouchableOpacity
-          style={styles.changeEmailButton}
-          onPress={handleBack}
-        >
-          <Text style={styles.changeEmailText}>
-            別のメールアドレスを使用する
-          </Text>
-        </TouchableOpacity>
 
         <Button
           title="ホームに戻る"
-          onPress={() => navigation.goBack()}
+          onPress={handleGoHome}
           fullWidth
-          variant="ghost"
-          style={styles.homeButton}
+          variant="outline"
         />
       </View>
     </KeyboardAvoidingView>
@@ -354,6 +293,17 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.lg,
     justifyContent: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+  },
+  loadingText: {
+    fontSize: typography.fontSize.base,
+    color: colors.gray[600],
+    marginTop: spacing.lg,
   },
   backButton: {
     flexDirection: 'row',
@@ -400,14 +350,17 @@ const styles = StyleSheet.create({
   codeInput: {
     marginBottom: spacing.md,
   },
-  emailInput: {
-    marginBottom: spacing.md,
-  },
   hint: {
     fontSize: typography.fontSize.sm,
     color: colors.gray[400],
     textAlign: 'center',
     marginTop: spacing.lg,
+  },
+  loginHint: {
+    fontSize: typography.fontSize.sm,
+    color: colors.warning,
+    textAlign: 'center',
+    marginTop: spacing.md,
   },
   eventCard: {
     padding: spacing.lg,
@@ -438,32 +391,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
     marginTop: spacing.sm,
   },
-  infoCard: {
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    backgroundColor: colors.gray[50],
-  },
-  infoTitle: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-    color: colors.gray[700],
-    marginBottom: spacing.sm,
-  },
-  infoText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[600],
-    lineHeight: typography.fontSize.sm * 1.6,
-  },
-  changeEmailButton: {
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-  },
-  changeEmailText: {
-    fontSize: typography.fontSize.sm,
-    color: colors.primary,
-    fontWeight: '500',
-  },
-  homeButton: {
-    marginTop: spacing.sm,
+  button: {
+    marginBottom: spacing.md,
   },
 });

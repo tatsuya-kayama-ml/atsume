@@ -5,7 +5,7 @@ import { createNativeStackNavigator, NativeStackNavigationOptions } from '@react
 import * as Linking from 'expo-linking';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigatorWithTimer } from './MainNavigator';
-import { EventCreateScreen, EventDetailScreen, EventEditScreen, JoinEventScreen, JoinEventCallbackScreen } from '../screens/events';
+import { EventCreateScreen, EventDetailScreen, EventEditScreen, JoinEventScreen } from '../screens/events';
 import { TermsOfServiceScreen, PrivacyPolicyScreen, ProfileEditScreen, ChangePasswordScreen, ContactScreen, NotificationSettingsScreen, FAQScreen, EmailSettingsScreen } from '../screens/settings';
 import { ResetPasswordScreen } from '../screens/auth';
 import { OnboardingScreen } from '../screens/onboarding';
@@ -66,7 +66,6 @@ const linking = {
       EventCreate: 'EventCreate',
       EventEdit: 'EventEdit/:eventId',
       JoinEvent: 'event/:code',
-      JoinEventCallback: 'join-event-callback',
       TermsOfService: 'TermsOfService',
       PrivacyPolicy: 'PrivacyPolicy',
       ProfileEdit: 'ProfileEdit',
@@ -89,18 +88,19 @@ export const RootNavigator: React.FC = () => {
     initialize();
   }, []);
 
-  // Handle deep link for password reset and magic link authentication
+  // Handle deep link for password reset
   useEffect(() => {
     const handleDeepLink = async (url: string | null) => {
       if (!url) return;
 
       logger.log('[Auth] Deep link received:', url);
 
-      // Check if URL contains auth tokens
-      // Supabase sends tokens in URL fragment: #access_token=...&refresh_token=...&type=...
-      if (url.includes('access_token')) {
+      // Check if URL contains auth tokens (password reset callback)
+      // Supabase sends tokens in URL fragment: #access_token=...&refresh_token=...&type=recovery
+      if (url.includes('access_token') && url.includes('type=recovery')) {
         try {
           // Parse tokens from URL
+          // URL format: atsume://reset-password#access_token=xxx&refresh_token=xxx&type=recovery
           const hashIndex = url.indexOf('#');
           if (hashIndex === -1) return;
 
@@ -109,10 +109,9 @@ export const RootNavigator: React.FC = () => {
 
           const accessToken = params.get('access_token');
           const refreshToken = params.get('refresh_token');
-          const type = params.get('type');
 
           if (accessToken && refreshToken) {
-            logger.log('[Auth] Setting session from deep link, type:', type);
+            logger.log('[Auth] Setting session from password reset link');
 
             // Set session using tokens from URL
             const { error } = await supabase.auth.setSession({
@@ -123,24 +122,7 @@ export const RootNavigator: React.FC = () => {
             if (error) {
               logger.error('[Auth] Failed to set session from deep link:', error);
             } else {
-              logger.log('[Auth] Session set successfully from deep link');
-
-              // Check if this is a magic link for event join
-              // Extract eventId from the URL path before the hash
-              const urlBeforeHash = url.substring(0, hashIndex);
-              if (urlBeforeHash.includes('join-event-callback')) {
-                const urlObj = new URL(urlBeforeHash.replace('atsume://', 'https://app.atsume.com/'));
-                const eventId = urlObj.searchParams.get('eventId');
-                const code = urlObj.searchParams.get('code');
-
-                if (eventId && navigationRef.current) {
-                  logger.log('[Auth] Navigating to JoinEventCallback with eventId:', eventId);
-                  // Wait for navigation to be ready
-                  setTimeout(() => {
-                    navigationRef.current?.navigate('JoinEventCallback', { eventId, code: code || undefined });
-                  }, 100);
-                }
-              }
+              logger.log('[Auth] Session set successfully from password reset link');
             }
           }
         } catch (error) {
@@ -217,14 +199,6 @@ export const RootNavigator: React.FC = () => {
               options={{
                 ...modalScreenOptions,
                 title: 'イベントに参加',
-              }}
-            />
-            <Stack.Screen
-              name="JoinEventCallback"
-              component={JoinEventCallbackScreen}
-              options={{
-                headerShown: false,
-                gestureEnabled: false,
               }}
             />
             <Stack.Screen

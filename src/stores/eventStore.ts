@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
-import { Event, EventParticipant, EventStatus, AttendanceStatus, PaymentStatus, SkillLevelSettings, GenderSettings, GenderType } from '../types';
+import { Event, EventParticipant, EventRsvp, EventAttendance, EventStatus, RsvpStatus, PaymentStatus, SkillLevelSettings, GenderSettings, GenderType } from '../types';
 import { logger } from '../utils';
 
 interface EventState {
@@ -24,18 +24,21 @@ interface EventState {
   joinEvent: (eventId: string) => Promise<void>;
   joinEventByCode: (code: string) => Promise<void>;
   leaveEvent: (eventId: string) => Promise<void>;
-  addManualParticipant: (eventId: string, name: string, options?: { attendanceStatus?: AttendanceStatus; paymentStatus?: PaymentStatus; skillLevel?: number; gender?: GenderType }) => Promise<void>;
-  updateManualParticipant: (participantId: string, data: { display_name?: string; attendance_status?: AttendanceStatus; payment_status?: PaymentStatus; skill_level?: number; gender?: GenderType }) => Promise<void>;
+  addManualParticipant: (eventId: string, name: string, options?: { rsvpStatus?: RsvpStatus; paymentStatus?: PaymentStatus; skillLevel?: number; gender?: GenderType }) => Promise<void>;
+  updateManualParticipant: (participantId: string, data: { display_name?: string; payment_status?: PaymentStatus; skill_level?: number; gender?: GenderType }) => Promise<void>;
   removeParticipant: (participantId: string) => Promise<void>;
-  updateAttendanceStatus: (participantId: string, status: AttendanceStatus) => Promise<void>;
   updatePaymentStatus: (participantId: string, status: PaymentStatus) => Promise<void>;
   updateParticipantProfile: (participantId: string, data: { skill_level?: number; gender?: GenderType }) => Promise<void>;
   reportPayment: (participantId: string, note?: string) => Promise<void>;
   confirmPayment: (participantId: string) => Promise<void>;
 
-  // Actual attendance (check-in)
-  checkInParticipant: (participantId: string, attended: boolean | null) => Promise<void>;
-  bulkCheckIn: (participantIds: string[], attended: boolean) => Promise<void>;
+  // RSVP actions (出席予定)
+  updateRsvpStatus: (participantId: string, status: RsvpStatus) => Promise<void>;
+
+  // Attendance actions (実際の出席)
+  recordAttendance: (participantId: string, attended: boolean) => Promise<void>;
+  removeAttendance: (participantId: string) => Promise<void>;
+  bulkRecordAttendance: (participantIds: string[], attended: boolean) => Promise<void>;
 
   // Event lookup
   findEventByCode: (code: string) => Promise<{ event: Event } | null>;
@@ -277,14 +280,23 @@ export const useEventStore = create<EventState>((set, get) => ({
         .from('event_participants')
         .select(`
           *,
-          user:users (*)
+          user:users (*),
+          rsvp:event_rsvps (*),
+          attendance:event_attendances (*)
         `)
         .eq('event_id', eventId)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
 
-      set({ participants: data || [], isLoading: false });
+      // Supabase returns arrays for one-to-one relations, extract first element
+      const participants = (data || []).map((p: any) => ({
+        ...p,
+        rsvp: Array.isArray(p.rsvp) ? p.rsvp[0] || null : p.rsvp,
+        attendance: Array.isArray(p.attendance) ? p.attendance[0] || null : p.attendance,
+      }));
+
+      set({ participants, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
     }
@@ -318,29 +330,44 @@ export const useEventStore = create<EventState>((set, get) => ({
         throw new Error('すでにこのイベントに参加しています');
       }
 
-      // Check capacity
+      // Check capacity using RSVP table
       if (event.capacity) {
         const { count } = await supabase
-          .from('event_participants')
+          .from('event_rsvps')
           .select('*', { count: 'exact', head: true })
           .eq('event_id', eventId)
-          .eq('attendance_status', 'attending');
+          .eq('status', 'attending');
 
         if (count && count >= event.capacity) {
           throw new Error('イベントの定員に達しています');
         }
       }
 
-      const { error } = await supabase
+      // Create participant record
+      const { data: participant, error } = await supabase
         .from('event_participants')
         .insert({
           event_id: eventId,
           user_id: user.id,
-          attendance_status: 'pending',
           payment_status: 'unpaid',
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Create RSVP record
+      const { error: rsvpError } = await supabase
+        .from('event_rsvps')
+        .insert({
+          event_id: eventId,
+          participant_id: participant.id,
+          status: 'pending',
+        });
+
+      if (rsvpError) {
+        logger.warn('[EventStore] Failed to create RSVP:', rsvpError);
+      }
 
       set({ isLoading: false });
       await get().fetchMyEvents();
