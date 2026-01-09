@@ -31,7 +31,7 @@ export type RootStackParamList = {
   EventDetail: { eventId: string };
   EventCreate: undefined;
   EventEdit: { eventId: string };
-  JoinEvent: { code?: string };
+  JoinEvent: { code: string };
   ParticipantDetail: { participantId: string; eventId: string };
   TeamEdit: { eventId: string };
   MatchResult: { matchId: string };
@@ -63,7 +63,8 @@ export type MainTabParamList = {
 
 export type EventTabParamList = {
   Info: undefined;
-  Participants: undefined;
+  Registration: undefined; // 参加受付
+  CheckIn: undefined; // チェックイン
   Payment: undefined;
   Teams: undefined;
   Matches: undefined;
