@@ -79,6 +79,7 @@ export const useEventStore = create<EventState>((set, get) => ({
       set({ isLoading: true, error: null });
 
       const { data: { user } } = await supabase.auth.getUser();
+      logger.log('[EventStore] fetchMyEvents - user:', user?.id);
       if (!user) throw new Error('ログインしていません');
 
       // Fetch events I organize
@@ -88,6 +89,7 @@ export const useEventStore = create<EventState>((set, get) => ({
         .eq('organizer_id', user.id)
         .order('date_time', { ascending: true });
 
+      logger.log('[EventStore] fetchMyEvents - organizedEvents:', organizedEvents?.length, 'error:', orgError);
       if (orgError) throw orgError;
 
       // Fetch events I participate in
@@ -96,6 +98,7 @@ export const useEventStore = create<EventState>((set, get) => ({
         .select('event_id')
         .eq('user_id', user.id);
 
+      logger.log('[EventStore] fetchMyEvents - participations:', participations?.length, 'error:', partError);
       if (partError) throw partError;
 
       const participatedEventIds = participations?.map(p => p.event_id) || [];
