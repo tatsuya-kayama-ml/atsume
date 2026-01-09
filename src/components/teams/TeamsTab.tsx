@@ -73,7 +73,7 @@ export const TeamsTab: React.FC<TeamsTabProps> = ({ eventId }) => {
   const hasSkillSettings = currentEvent?.skill_level_settings?.enabled ?? false;
   const hasGenderSettings = currentEvent?.gender_settings?.enabled ?? false;
   const attendingParticipants = participants.filter((p) => p.attendance_status === 'attending');
-  const checkedInParticipants = participants.filter((p) => p.check_in_status === 'checked_in');
+  const checkedInParticipants = participants.filter((p) => p.checked_in_at !== null);
 
   // 既にチームに割り当てられているparticipant IDのセット
   const assignedParticipantIds = new Set(
@@ -1019,6 +1019,7 @@ const styles = StyleSheet.create({
   },
   teamNameTouchable: {
     paddingVertical: spacing.xs,
+    justifyContent: 'center',
   },
   editNameContainer: {
     flexDirection: 'row',
