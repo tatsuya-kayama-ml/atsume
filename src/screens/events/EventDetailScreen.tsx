@@ -33,7 +33,6 @@ import {
   Banknote,
   Ticket,
   Link,
-  Lock,
   Edit,
   Trash2,
   Loader,
@@ -342,24 +341,6 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         </Card>
       )}
 
-      {/* Password Info - Show to organizer and participants */}
-      {currentEvent.password_hash && (
-        <Card variant="outlined" style={styles.passwordCard}>
-          <View style={styles.passwordHeader}>
-            <Lock size={20} color={colors.gray[500]} style={styles.passwordIconStyle} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.passwordTitle}>参加パスワード設定済み</Text>
-              <Text style={styles.passwordSubtitle}>参加時にパスワードが必要です</Text>
-              {currentEvent.password && (isOrganizer || participants.some(p => p.user_id === user?.id)) && (
-                <View style={styles.passwordDisplayRow}>
-                  <Text style={styles.passwordLabel}>パスワード:</Text>
-                  <Text style={styles.passwordValue}>{currentEvent.password}</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </Card>
-      )}
     </ScrollView>
   );
 };
@@ -2622,51 +2603,6 @@ const styles = StyleSheet.create({
   },
   buttonIcon: {
     fontSize: 16,
-  },
-
-  // Password Card
-  passwordCard: {
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  passwordHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  passwordIcon: {
-    fontSize: 24,
-    marginRight: spacing.md,
-  },
-  passwordIconStyle: {
-    marginRight: spacing.md,
-  },
-  passwordTitle: {
-    fontSize: typography.fontSize.base,
-    fontWeight: '600',
-    color: colors.gray[900],
-  },
-  passwordSubtitle: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[500],
-  },
-  passwordDisplayRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.sm,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[200],
-  },
-  passwordLabel: {
-    fontSize: typography.fontSize.sm,
-    color: colors.gray[600],
-    marginRight: spacing.xs,
-  },
-  passwordValue: {
-    fontSize: typography.fontSize.base,
-    fontWeight: '700',
-    color: colors.primary,
-    letterSpacing: 1,
   },
 
   // Join Event Card
