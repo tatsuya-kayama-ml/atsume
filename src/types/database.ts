@@ -63,8 +63,6 @@ export interface Event {
   fee: number;
   capacity: number | null;
   event_code: string;
-  password_hash: string | null;
-  password: string | null; // Plain text password for display to participants
   invite_link: string;
   status: EventStatus;
   timer_position: TimerPosition;
