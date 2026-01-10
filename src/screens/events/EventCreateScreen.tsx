@@ -51,7 +51,7 @@ const eventSchema = z.object({
     .min(1, 'イベント名を入力してください')
     .max(20, 'イベント名は20文字以内で入力してください'),
   description: z.string().max(200, '説明は200文字以内で入力してください').optional(),
-  location: z.string().min(1, '場所を入力してください').max(30, '場所は30文字以内で入力してください'),
+  location: z.string().max(30, '場所は30文字以内で入力してください').optional(),
   fee: z
     .string()
     .optional()
@@ -89,7 +89,11 @@ const roundTo30Minutes = (date: Date): Date => {
 export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
   const { createEvent, events, fetchMyEvents } = useEventStore();
   const { showToast } = useToast();
-  const [selectedDate, setSelectedDate] = useState(() => roundTo30Minutes(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
@@ -223,7 +227,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
         name: data.name,
         description: data.description,
         date_time: selectedDate.toISOString(),
-        location: data.location,
+        location: data.location || '未定',
         fee: data.fee ? Number(data.fee) : 0,
         capacity: data.capacity ? Number(data.capacity) : undefined,
         skill_level_settings: skillSettings,
