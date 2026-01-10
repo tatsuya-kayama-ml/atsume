@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
-import { Event, EventParticipant, EventRsvp, EventAttendance, EventStatus, RsvpStatus, PaymentStatus, SkillLevelSettings, GenderSettings, GenderType } from '../types';
+import { Event, EventParticipant, EventRsvp, EventAttendance, EventPaymentMethod, EventStatus, RsvpStatus, PaymentStatus, PaymentMethodType, SkillLevelSettings, GenderSettings, GenderType } from '../types';
 import { logger } from '../utils';
 
 interface EventState {
   events: Event[];
   currentEvent: Event | null;
   participants: EventParticipant[];
+  paymentMethods: EventPaymentMethod[];
   isLoading: boolean;
   error: string | null;
 
@@ -19,6 +20,13 @@ interface EventState {
   updateEventStatus: (eventId: string, status: EventStatus) => Promise<void>;
   duplicateEvent: (eventId: string) => Promise<Event>;
 
+  // Payment method actions
+  fetchPaymentMethods: (eventId: string) => Promise<void>;
+  addPaymentMethod: (eventId: string, data: { type: PaymentMethodType; label: string; value: string }) => Promise<EventPaymentMethod>;
+  updatePaymentMethod: (methodId: string, data: { type?: PaymentMethodType; label?: string; value?: string }) => Promise<void>;
+  deletePaymentMethod: (methodId: string) => Promise<void>;
+  reorderPaymentMethods: (methodIds: string[]) => Promise<void>;
+
   // Participant actions
   fetchParticipants: (eventId: string) => Promise<void>;
   joinEvent: (eventId: string) => Promise<void>;
@@ -29,7 +37,7 @@ interface EventState {
   removeParticipant: (participantId: string) => Promise<void>;
   updatePaymentStatus: (participantId: string, status: PaymentStatus) => Promise<void>;
   updateParticipantProfile: (participantId: string, data: { skill_level?: number; gender?: GenderType }) => Promise<void>;
-  reportPayment: (participantId: string, note?: string) => Promise<void>;
+  reportPayment: (participantId: string, note?: string, paymentMethodId?: string) => Promise<void>;
   confirmPayment: (participantId: string) => Promise<void>;
 
   // RSVP actions (出席予定)
@@ -77,6 +85,7 @@ export const useEventStore = create<EventState>((set, get) => ({
   events: [],
   currentEvent: null,
   participants: [],
+  paymentMethods: [],
   isLoading: false,
   error: null,
 
@@ -289,6 +298,119 @@ export const useEventStore = create<EventState>((set, get) => ({
 
   updateEventStatus: async (eventId: string, status: EventStatus) => {
     await get().updateEvent(eventId, { status });
+  },
+
+  // Payment method actions
+  fetchPaymentMethods: async (eventId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('event_payment_methods')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('order_index', { ascending: true });
+
+      if (error) throw error;
+
+      set({ paymentMethods: data || [] });
+    } catch (error: any) {
+      logger.error('[EventStore] fetchPaymentMethods error:', error);
+      set({ paymentMethods: [] });
+    }
+  },
+
+  addPaymentMethod: async (eventId: string, data: { type: PaymentMethodType; label: string; value: string }) => {
+    try {
+      // Get current max order_index
+      const { paymentMethods } = get();
+      const maxOrder = paymentMethods.reduce((max, m) => Math.max(max, m.order_index), -1);
+
+      const { data: newMethod, error } = await supabase
+        .from('event_payment_methods')
+        .insert({
+          event_id: eventId,
+          type: data.type,
+          label: data.label,
+          value: data.value,
+          order_index: maxOrder + 1,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      set((state) => ({
+        paymentMethods: [...state.paymentMethods, newMethod],
+      }));
+
+      return newMethod;
+    } catch (error: any) {
+      logger.error('[EventStore] addPaymentMethod error:', error);
+      throw error;
+    }
+  },
+
+  updatePaymentMethod: async (methodId: string, data: { type?: PaymentMethodType; label?: string; value?: string }) => {
+    try {
+      const { error } = await supabase
+        .from('event_payment_methods')
+        .update(data)
+        .eq('id', methodId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        paymentMethods: state.paymentMethods.map((m) =>
+          m.id === methodId ? { ...m, ...data } : m
+        ),
+      }));
+    } catch (error: any) {
+      logger.error('[EventStore] updatePaymentMethod error:', error);
+      throw error;
+    }
+  },
+
+  deletePaymentMethod: async (methodId: string) => {
+    try {
+      const { error } = await supabase
+        .from('event_payment_methods')
+        .delete()
+        .eq('id', methodId);
+
+      if (error) throw error;
+
+      set((state) => ({
+        paymentMethods: state.paymentMethods.filter((m) => m.id !== methodId),
+      }));
+    } catch (error: any) {
+      logger.error('[EventStore] deletePaymentMethod error:', error);
+      throw error;
+    }
+  },
+
+  reorderPaymentMethods: async (methodIds: string[]) => {
+    try {
+      // Update each method's order_index
+      const updates = methodIds.map((id, index) =>
+        supabase
+          .from('event_payment_methods')
+          .update({ order_index: index })
+          .eq('id', id)
+      );
+
+      await Promise.all(updates);
+
+      set((state) => ({
+        paymentMethods: state.paymentMethods
+          .map((m) => ({
+            ...m,
+            order_index: methodIds.indexOf(m.id),
+          }))
+          .sort((a, b) => a.order_index - b.order_index),
+      }));
+    } catch (error: any) {
+      logger.error('[EventStore] reorderPaymentMethods error:', error);
+      throw error;
+    }
   },
 
   fetchParticipants: async (eventId: string) => {
@@ -731,14 +853,15 @@ export const useEventStore = create<EventState>((set, get) => ({
     }
   },
 
-  reportPayment: async (participantId: string, note?: string) => {
+  reportPayment: async (participantId: string, note?: string, paymentMethodId?: string) => {
     try {
       set({ isLoading: true, error: null });
 
       const updateData: {
         payment_status: PaymentStatus;
         payment_reported_at: string;
-        payment_note?: string;
+        payment_note?: string | null;
+        payment_method_id?: string | null;
       } = {
         payment_status: 'pending_confirmation',
         payment_reported_at: new Date().toISOString(),
@@ -748,12 +871,21 @@ export const useEventStore = create<EventState>((set, get) => ({
         updateData.payment_note = note || null;
       }
 
+      if (paymentMethodId !== undefined) {
+        updateData.payment_method_id = paymentMethodId || null;
+      }
+
       const { error } = await supabase
         .from('event_participants')
         .update(updateData)
         .eq('id', participantId);
 
       if (error) throw error;
+
+      // Get the payment method if specified
+      const paymentMethod = paymentMethodId
+        ? get().paymentMethods.find((m) => m.id === paymentMethodId)
+        : undefined;
 
       set((state) => ({
         participants: state.participants.map((p) =>
@@ -763,6 +895,8 @@ export const useEventStore = create<EventState>((set, get) => ({
                 payment_status: 'pending_confirmation' as PaymentStatus,
                 payment_reported_at: new Date().toISOString(),
                 payment_note: note || null,
+                payment_method_id: paymentMethodId || null,
+                payment_method: paymentMethod,
               }
             : p
         ),
@@ -1046,5 +1180,5 @@ export const useEventStore = create<EventState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
-  clearCurrentEvent: () => set({ currentEvent: null, participants: [] }),
+  clearCurrentEvent: () => set({ currentEvent: null, participants: [], paymentMethods: [] }),
 }));
