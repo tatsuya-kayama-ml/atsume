@@ -89,7 +89,11 @@ const roundTo30Minutes = (date: Date): Date => {
 export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
   const { createEvent, events, fetchMyEvents } = useEventStore();
   const { showToast } = useToast();
-  const [selectedDate, setSelectedDate] = useState(() => roundTo30Minutes(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
