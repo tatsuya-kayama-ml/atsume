@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { ActivityIndicator, View, StyleSheet, Platform } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Platform, Pressable, Text } from 'react-native';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator, NativeStackNavigationOptions } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
@@ -188,10 +188,32 @@ export const RootNavigator: React.FC = () => {
             <Stack.Screen
               name="EventDetail"
               component={EventDetailScreen}
-              options={{
+              options={({ navigation }) => ({
                 ...modalScreenOptions,
                 title: 'イベント詳細',
-              }}
+                headerLeft: () => {
+                  const canGoBack = navigation.canGoBack();
+                  return (
+                    <Pressable
+                      onPress={() => {
+                        if (canGoBack) {
+                          navigation.goBack();
+                        } else {
+                          navigation.reset({
+                            index: 0,
+                            routes: [{ name: 'Main' }],
+                          });
+                        }
+                      }}
+                      style={{ paddingRight: 8 }}
+                    >
+                      <Text style={{ color: colors.primary, fontSize: 16 }}>
+                        {canGoBack ? '戻る' : 'ホーム'}
+                      </Text>
+                    </Pressable>
+                  );
+                },
+              })}
             />
             <Stack.Screen
               name="JoinEvent"

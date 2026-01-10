@@ -366,7 +366,7 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
 // Registration Tab (参加受付)
 const RegistrationTab: React.FC<{ eventId: string }> = ({ eventId }) => {
-  const { participants, currentEvent, fetchParticipants, updateRsvpStatus, updateParticipantProfile, addManualParticipant, updateManualParticipant, removeParticipant, isLoading, isRsvpClosed } = useEventStore();
+  const { participants, currentEvent, fetchParticipants, updateRsvpStatus, updateParticipantProfile, addManualParticipant, updateManualParticipant, removeParticipant, isLoading, isRsvpClosed, closeRsvp, reopenRsvp } = useEventStore();
   const { user } = useAuthStore();
   const { showToast } = useToast();
   const [showAddModal, setShowAddModal] = React.useState(false);
@@ -485,6 +485,22 @@ const RegistrationTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         <View style={styles.rsvpClosedBanner}>
           <Clock size={16} color={colors.gray[600]} />
           <Text style={styles.rsvpClosedBannerText}>参加受付は締め切られています</Text>
+          {isOrganizer && (
+            <Button
+              title="再開する"
+              variant="outline"
+              size="sm"
+              onPress={async () => {
+                try {
+                  await reopenRsvp(eventId);
+                  showToast('参加受付を再開しました', 'success');
+                } catch (error: any) {
+                  showToast(error.message || '再開に失敗しました', 'error');
+                }
+              }}
+              style={{ marginLeft: 'auto' }}
+            />
+          )}
         </View>
       )}
 
@@ -496,6 +512,36 @@ const RegistrationTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             締切: {formatDateTime(currentEvent.rsvp_deadline).fullDate} {formatDateTime(currentEvent.rsvp_deadline).time}
           </Text>
         </View>
+      )}
+
+      {/* 主催者向け: 参加受付締切ボタン */}
+      {isOrganizer && !rsvpClosed && (
+        <Card variant="elevated" style={styles.rsvpControlCard}>
+          <View style={styles.rsvpControlHeader}>
+            <Text style={styles.rsvpControlTitle}>参加受付管理</Text>
+            <Badge
+              label="受付中"
+              color="success"
+              size="sm"
+            />
+          </View>
+          <Text style={styles.rsvpControlDescription}>
+            参加受付を締め切ると、新規の参加登録ができなくなります。
+          </Text>
+          <Button
+            title="参加受付を締め切る"
+            variant="outline"
+            onPress={async () => {
+              try {
+                await closeRsvp(eventId);
+                showToast('参加受付を締め切りました', 'success');
+              } catch (error: any) {
+                showToast(error.message || '締切に失敗しました', 'error');
+              }
+            }}
+            style={{ marginTop: spacing.sm }}
+          />
+        </Card>
       )}
 
       {/* Join Event Card (Not Participating - Non-organizer) */}
@@ -4086,6 +4132,27 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: '500',
     color: colors.warning,
+  },
+
+  // RSVP Control Card (主催者向け締切管理)
+  rsvpControlCard: {
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  rsvpControlHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  rsvpControlTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  rsvpControlDescription: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
   },
 
   // Closed Registration Card
