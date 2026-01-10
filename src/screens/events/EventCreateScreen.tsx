@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -194,15 +194,18 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   const onSubmit = async (data: EventFormData) => {
     logger.log('[EventCreate] onSubmit called');
 
-    if (isSubmitting) {
+    // useRefで同期的に二重送信を防止（useStateは非同期更新のため競合状態が発生しうる）
+    if (isSubmittingRef.current) {
       logger.log('[EventCreate] Already submitting, skipping');
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
 
     try {
@@ -244,6 +247,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
       logger.error('[EventCreate] Error creating event:', error);
       showToast(error.message || 'イベントの作成に失敗しました', 'error');
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
