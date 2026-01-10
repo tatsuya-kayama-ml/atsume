@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,8 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
   width = 80,
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastOffsetRef = useRef<number>(0);
   const selectedIndex = items.findIndex((item) => item.value === selectedValue);
 
   useEffect(() => {
@@ -39,7 +41,50 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
     }
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const snapToNearestItem = useCallback((offsetY: number) => {
+    const index = Math.round(offsetY / ITEM_HEIGHT);
+    const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
+
+    if (items[clampedIndex]) {
+      onValueChange(items[clampedIndex].value);
+
+      if (scrollViewRef.current) {
+        scrollViewRef.current.scrollTo({
+          y: clampedIndex * ITEM_HEIGHT,
+          animated: true,
+        });
+      }
+    }
+  }, [items, onValueChange]);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (Platform.OS !== 'web') return;
+
+    const offsetY = event.nativeEvent.contentOffset.y;
+    lastOffsetRef.current = offsetY;
+
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+
+    scrollTimeoutRef.current = setTimeout(() => {
+      snapToNearestItem(lastOffsetRef.current);
+    }, 100);
+  }, [snapToNearestItem]);
+
   const handleScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+
     const offsetY = event.nativeEvent.contentOffset.y;
     const index = Math.round(offsetY / ITEM_HEIGHT);
     const clampedIndex = Math.max(0, Math.min(index, items.length - 1));
@@ -75,8 +120,10 @@ export const WheelPicker: React.FC<WheelPickerProps> = ({
         showsVerticalScrollIndicator={false}
         snapToInterval={Platform.OS !== 'web' ? ITEM_HEIGHT : undefined}
         decelerationRate="fast"
+        onScroll={handleScroll}
         onMomentumScrollEnd={handleScrollEnd}
         onScrollEndDrag={handleScrollEnd}
+        scrollEventThrottle={16}
         contentContainerStyle={{
           paddingVertical: ITEM_HEIGHT * Math.floor(VISIBLE_ITEMS / 2),
         }}
