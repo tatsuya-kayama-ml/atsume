@@ -60,6 +60,7 @@ interface CreateEventData {
   capacity?: number;
   skill_level_settings?: SkillLevelSettings;
   gender_settings?: GenderSettings;
+  rsvp_deadline?: string;
 }
 
 // Generate 6-character alphanumeric code
@@ -175,6 +176,7 @@ export const useEventStore = create<EventState>((set, get) => ({
         timer_position: 'bottom',
         skill_level_settings: data.skill_level_settings || null,
         gender_settings: data.gender_settings || null,
+        rsvp_deadline: data.rsvp_deadline || null,
       };
       logger.log('[EventStore] Inserting event');
 

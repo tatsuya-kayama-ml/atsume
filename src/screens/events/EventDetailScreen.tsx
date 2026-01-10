@@ -871,6 +871,8 @@ const RegistrationTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         isOwnParticipation={selectedParticipant?.user_id === user?.id}
         skillLevelSettings={currentEvent?.skill_level_settings}
         genderSettings={currentEvent?.gender_settings}
+        hidePaymentInfo={true}
+        hideActualAttendance={true}
         onUpdate={handleUpdateParticipant}
         onRemove={handleRemoveParticipant}
         onUpdateRsvp={handleStatusChange}

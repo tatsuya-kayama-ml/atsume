@@ -29,6 +29,8 @@ interface ParticipantDetailModalProps {
   isOwnParticipation?: boolean; // 自分自身の参加情報かどうか
   skillLevelSettings?: SkillLevelSettings | null;
   genderSettings?: GenderSettings | null;
+  hidePaymentInfo?: boolean; // 支払い情報を非表示にする
+  hideActualAttendance?: boolean; // 実際の出席状態を非表示にする
   onUpdate: (participantId: string, data: {
     display_name?: string;
     payment_status?: PaymentStatus;
@@ -67,6 +69,8 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
   isOwnParticipation = false,
   skillLevelSettings,
   genderSettings,
+  hidePaymentInfo = false,
+  hideActualAttendance = false,
   onUpdate,
   onRemove,
   onUpdateRsvp,
@@ -334,7 +338,7 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
               <>
                 {/* Status Overview */}
                 <View style={styles.statusOverview}>
-                  <View style={styles.statusItem}>
+                  <View style={[styles.statusItem, hidePaymentInfo && { flex: 1 }]}>
                     <Text style={styles.statusLabel}>出欠状況</Text>
                     <View style={[styles.statusValue, { backgroundColor: rsvpConfig.color + '15' }]}>
                       <Text style={[styles.statusValueText, { color: rsvpConfig.color }]}>
@@ -342,14 +346,16 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                       </Text>
                     </View>
                   </View>
-                  <View style={styles.statusItem}>
-                    <Text style={styles.statusLabel}>支払い</Text>
-                    <Badge
-                      label={paymentConfig.label}
-                      color={paymentConfig.color}
-                      size="md"
-                    />
-                  </View>
+                  {!hidePaymentInfo && (
+                    <View style={styles.statusItem}>
+                      <Text style={styles.statusLabel}>支払い</Text>
+                      <Badge
+                        label={paymentConfig.label}
+                        color={paymentConfig.color}
+                        size="md"
+                      />
+                    </View>
+                  )}
                 </View>
 
                 {/* Additional Info */}
@@ -383,8 +389,8 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                   </View>
                 )}
 
-                {/* Actual Attendance - 主催者のみ表示 */}
-                {isOrganizer && (
+                {/* Actual Attendance - 主催者のみ表示（hideActualAttendanceがfalseの場合） */}
+                {isOrganizer && !hideActualAttendance && (
                   <View style={styles.infoSection}>
                     <Text style={styles.sectionTitle}>当日の出席</Text>
                     <Badge
@@ -460,8 +466,8 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                   </View>
                 )}
 
-                {/* Payment Status - Organizer Only */}
-                {canEditAll && (
+                {/* Payment Status - Organizer Only (hidePaymentInfoがfalseの場合) */}
+                {canEditAll && !hidePaymentInfo && (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>支払い状況</Text>
                     <View style={styles.optionsRow}>
@@ -492,8 +498,8 @@ export const ParticipantDetailModal: React.FC<ParticipantDetailModalProps> = ({
                   </View>
                 )}
 
-                {/* Actual Attendance - Organizer Only */}
-                {onCheckIn && canEditAll && (
+                {/* Actual Attendance - Organizer Only (hideActualAttendanceがfalseの場合) */}
+                {onCheckIn && canEditAll && !hideActualAttendance && (
                   <View style={styles.section}>
                     <Text style={styles.sectionLabel}>当日の出席</Text>
                     <View style={styles.optionsRow}>
