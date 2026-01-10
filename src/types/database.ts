@@ -4,6 +4,7 @@ export type RsvpStatus = 'pending' | 'attending' | 'not_attending' | 'maybe' | '
 /** @deprecated Use RsvpStatus instead */
 export type AttendanceStatus = RsvpStatus;
 export type PaymentStatus = 'unpaid' | 'pending_confirmation' | 'paid';
+export type PaymentMethodType = 'paypay' | 'bank' | 'other';
 export type EventStatus = 'open' | 'completed'; // 実施予定 | 終了
 export type CheckInMethod = 'manual' | 'qr_code' | 'auto';
 export type TournamentFormat =
@@ -68,11 +69,25 @@ export interface Event {
   timer_position: TimerPosition;
   skill_level_settings: SkillLevelSettings | null;
   gender_settings: GenderSettings | null;
-  payment_link: string | null; // 支払い情報（PayPay URLまたは銀行口座情報）
-  payment_link_label: string | null; // 支払い情報のラベル（例: "PayPay", "銀行振込"）
+  payment_link: string | null; // 支払い情報（PayPay URLまたは銀行口座情報）- 後方互換性のため残す
+  payment_link_label: string | null; // 支払い情報のラベル（例: "PayPay", "銀行振込"）- 後方互換性のため残す
   rsvp_deadline: string | null; // 参加受付締切日時
   rsvp_closed: boolean; // 参加受付締切フラグ（手動締切）
   rsvp_closed_at: string | null; // 締切実行日時
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  payment_methods?: EventPaymentMethod[];
+}
+
+// 支払い方法（複数登録可能）
+export interface EventPaymentMethod {
+  id: string;
+  event_id: string;
+  type: PaymentMethodType;
+  label: string;
+  value: string;
+  order_index: number;
   created_at: string;
   updated_at: string;
 }
@@ -110,6 +125,7 @@ export interface EventParticipant {
   payment_reported_at: string | null;
   payment_confirmed_at: string | null;
   payment_note: string | null; // 支払い報告時のメモ（例: PayPayで送りました、ユーザー名XXです）
+  payment_method_id: string | null; // 使用した支払い方法のID
   skill_level: number | null;
   gender: GenderType | null;
   created_at: string;
@@ -120,6 +136,7 @@ export interface EventParticipant {
   is_manual?: boolean; // 手動追加フラグ
   rsvp?: EventRsvp; // 出席予定
   attendance?: EventAttendance; // 実際の出席
+  payment_method?: EventPaymentMethod; // 使用した支払い方法
 }
 
 export interface Team {
@@ -271,6 +288,11 @@ export interface Database {
         Row: EventAttendance;
         Insert: Omit<EventAttendance, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Omit<EventAttendance, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      event_payment_methods: {
+        Row: EventPaymentMethod;
+        Insert: Omit<EventPaymentMethod, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<EventPaymentMethod, 'id' | 'created_at' | 'updated_at'>>;
       };
       teams: {
         Row: Team;
