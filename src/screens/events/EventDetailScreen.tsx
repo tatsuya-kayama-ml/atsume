@@ -105,16 +105,27 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `${currentEvent.name}\n\n日時: ${fullDate} ${time}\n場所: ${currentEvent.location}\n参加費: ¥${currentEvent.fee.toLocaleString()}\n\n参加コード: ${currentEvent.event_code}`,
+        message: `${currentEvent.name}\n\n日時: ${fullDate} ${time}\n場所: ${currentEvent.location}\n参加費: ¥${currentEvent.fee.toLocaleString()}\n\n参加はこちらから:\n${currentEvent.invite_link}`,
       });
     } catch (error) {
       logger.error('Share failed:', error);
     }
   };
 
-  const handleCopyCode = async () => {
+  const handleCopyLink = async () => {
     try {
-      await Clipboard.setStringAsync(currentEvent.event_code);
+      await Clipboard.setStringAsync(currentEvent.invite_link);
+      showToast('リンクをコピーしました', 'success');
+    } catch (error) {
+      showToast('コピーに失敗しました', 'error');
+    }
+  };
+
+  const handleCopyDetail = async () => {
+    try {
+      const detail = `${currentEvent.name}\n\n日時: ${fullDate} ${time}\n場所: ${currentEvent.location}\n参加費: ¥${currentEvent.fee.toLocaleString()}\n\n参加はこちらから:\n${currentEvent.invite_link}`;
+      await Clipboard.setStringAsync(detail);
+      showToast('詳細をコピーしました', 'success');
     } catch (error) {
       showToast('コピーに失敗しました', 'error');
     }
@@ -295,13 +306,13 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         )}
       </Card>
 
-      {/* Invite Card (Organizer Only) */}
+      {/* Invite Link Card (Organizer Only) */}
       {isOrganizer && (
         <Card variant="elevated" style={styles.inviteCard}>
           <View style={styles.inviteHeader}>
             <View>
-              <Text style={styles.inviteTitle}>招待コード</Text>
-              <Text style={styles.inviteSubtitle}>タップでコピー・共有できます</Text>
+              <Text style={styles.inviteTitle}>招待リンク</Text>
+              <Text style={styles.inviteSubtitle}>リンクをコピーして参加者に共有</Text>
             </View>
             <View style={styles.inviteBadge}>
               <Text style={styles.inviteBadgeText}>主催者</Text>
@@ -310,10 +321,10 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
           <TouchableOpacity
             style={styles.codeContainer}
-            onPress={handleCopyCode}
+            onPress={handleCopyLink}
             activeOpacity={0.7}
           >
-            <Text style={styles.codeText}>{currentEvent.event_code}</Text>
+            <Text style={styles.linkText} numberOfLines={1}>{currentEvent.invite_link}</Text>
             <View style={styles.copyIconContainer}>
               <Copy size={16} color={colors.primary} />
               <Text style={styles.copyHint}>タップでコピー</Text>
@@ -322,20 +333,28 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
           <View style={styles.inviteButtonsRow}>
             <TouchableOpacity
-              style={styles.inviteButtonSecondary}
-              onPress={handleCopyCode}
+              style={styles.inviteButtonTertiary}
+              onPress={handleCopyLink}
               activeOpacity={0.7}
             >
-              <Copy size={16} color={colors.primary} />
-              <Text style={styles.inviteButtonSecondaryText}>コピー</Text>
+              <Link size={14} color={colors.primary} />
+              <Text style={styles.inviteButtonTertiaryText}>リンク</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.inviteButtonTertiary}
+              onPress={handleCopyDetail}
+              activeOpacity={0.7}
+            >
+              <Copy size={14} color={colors.primary} />
+              <Text style={styles.inviteButtonTertiaryText}>詳細</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.inviteButtonPrimary}
               onPress={handleShare}
               activeOpacity={0.7}
             >
-              <Link size={16} color={colors.white} />
-              <Text style={styles.inviteButtonPrimaryText}>共有する</Text>
+              <Link size={14} color={colors.white} />
+              <Text style={styles.inviteButtonPrimaryText}>共有</Text>
             </TouchableOpacity>
           </View>
         </Card>
@@ -2554,6 +2573,11 @@ const styles = StyleSheet.create({
     color: colors.primary,
     letterSpacing: 6,
   },
+  linkText: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.primary,
+  },
   copyIconContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2585,19 +2609,36 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primary,
   },
-  inviteButtonPrimary: {
-    flex: 2,
+  inviteButtonTertiary: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.gray[50],
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+  },
+  inviteButtonTertiaryText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  inviteButtonPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
     borderRadius: borderRadius.lg,
     backgroundColor: colors.primary,
     ...shadows.primary,
   },
   inviteButtonPrimaryText: {
-    fontSize: typography.fontSize.base,
+    fontSize: typography.fontSize.sm,
     fontWeight: '600',
     color: colors.white,
   },

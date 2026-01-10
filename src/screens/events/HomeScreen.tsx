@@ -60,7 +60,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   // Tooltips
   const createTooltip = useTooltip('home_create_event');
-  const joinTooltip = useTooltip('home_join_event');
 
   // Filter events by status
   const activeEvents = useMemo(() =>
@@ -125,14 +124,9 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
 
   // FAB animations
   const primaryFabScale = useSharedValue(1);
-  const secondaryFabScale = useSharedValue(1);
 
   const primaryFabAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: primaryFabScale.value }],
-  }));
-
-  const secondaryFabAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: secondaryFabScale.value }],
   }));
 
   const handlePrimaryFabPress = () => {
@@ -140,13 +134,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     navigation.navigate('EventCreate');
-  };
-
-  const handleSecondaryFabPress = () => {
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    navigation.navigate('JoinEvent', {});
   };
 
   useFocusEffect(
@@ -250,7 +237,7 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         entering={FadeInDown.delay(400).springify()}
         style={styles.emptyMessage}
       >
-        新しいイベントを作成するか、{'\n'}招待コードでイベントに参加しましょう
+        新しいイベントを作成しましょう{'\n'}参加者には招待リンクを共有できます
       </Animated.Text>
       <Animated.View
         entering={FadeInDown.delay(500).springify()}
@@ -265,16 +252,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         >
           <Plus size={18} color={colors.white} style={{ marginRight: spacing.xs }} />
           <Text style={styles.emptyActionButtonText}>イベントを作成</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.emptyActionButtonSecondary}
-          onPress={() => navigation.navigate('JoinEvent', {})}
-          activeOpacity={0.7}
-          accessibilityLabel="招待コードで参加する"
-          accessibilityHint="招待コード入力画面を開きます"
-        >
-          <Ticket size={18} color={colors.primary} style={{ marginRight: spacing.xs }} />
-          <Text style={styles.emptyActionButtonSecondaryText}>コードで参加</Text>
         </TouchableOpacity>
       </Animated.View>
     </View>
@@ -575,21 +552,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         entering={FadeInUp.delay(300).springify()}
         style={[styles.fabContainer, { bottom: insets.bottom + spacing.lg }]}
       >
-        <View ref={joinTooltip.ref} collapsable={false}>
-          <AnimatedPressable
-            style={[styles.fabSecondary, secondaryFabAnimatedStyle]}
-            onPress={handleSecondaryFabPress}
-            onPressIn={() => {
-              secondaryFabScale.value = withSpring(0.92, { damping: 15, stiffness: 300 });
-            }}
-            onPressOut={() => {
-              secondaryFabScale.value = withSpring(1, { damping: 15, stiffness: 300 });
-            }}
-          >
-            <Ticket size={18} color={colors.gray[700]} style={styles.fabIconStyle} />
-            <Text style={styles.fabSecondaryText}>参加する</Text>
-          </AnimatedPressable>
-        </View>
         <View ref={createTooltip.ref} collapsable={false}>
           <AnimatedPressable
             style={[styles.fab, primaryFabAnimatedStyle]}
@@ -614,14 +576,6 @@ export const HomeScreen: React.FC<Props> = ({ navigation }) => {
         message={TOOLTIP_CONTENT.home_create_event.message}
         onDismiss={createTooltip.dismiss}
         targetRect={createTooltip.targetRect}
-        position="top"
-      />
-      <Tooltip
-        visible={joinTooltip.isVisible}
-        title={TOOLTIP_CONTENT.home_join_event.title}
-        message={TOOLTIP_CONTENT.home_join_event.message}
-        onDismiss={joinTooltip.dismiss}
-        targetRect={joinTooltip.targetRect}
         position="top"
       />
     </View>
