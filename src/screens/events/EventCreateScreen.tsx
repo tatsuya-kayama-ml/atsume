@@ -111,6 +111,17 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
   const [showGenderDetails, setShowGenderDetails] = useState(false);
   const [genderOptions, setGenderOptions] = useState<GenderOption[]>(DEFAULT_GENDER_OPTIONS);
 
+  // 参加締め切り設定の状態
+  const [rsvpDeadlineEnabled, setRsvpDeadlineEnabled] = useState(false);
+  const [rsvpDeadlineDate, setRsvpDeadlineDate] = useState<Date>(() => {
+    // デフォルトはイベント日時の1日前
+    const date = new Date();
+    date.setHours(23, 59, 0, 0);
+    return date;
+  });
+  const [showRsvpDeadlineDatePicker, setShowRsvpDeadlineDatePicker] = useState(false);
+  const [showRsvpDeadlineTimePicker, setShowRsvpDeadlineTimePicker] = useState(false);
+
   // 過去イベント一覧を取得（初回のみ）
   useEffect(() => {
     if (events.length === 0) {
@@ -118,6 +129,16 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // イベント日時が変更されたら、締め切り日時のデフォルトを更新（イベント前日の23:59）
+  useEffect(() => {
+    if (!rsvpDeadlineEnabled) {
+      const defaultDeadline = new Date(selectedDate);
+      defaultDeadline.setDate(defaultDeadline.getDate() - 1);
+      defaultDeadline.setHours(23, 59, 0, 0);
+      setRsvpDeadlineDate(defaultDeadline);
+    }
+  }, [selectedDate, rsvpDeadlineEnabled]);
 
   const {
     control,
@@ -193,6 +214,20 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
     setShowTimePicker(false);
   };
 
+  const handleRsvpDeadlineDateConfirm = (date: Date) => {
+    const newDate = new Date(rsvpDeadlineDate);
+    newDate.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+    setRsvpDeadlineDate(newDate);
+    setShowRsvpDeadlineDatePicker(false);
+  };
+
+  const handleRsvpDeadlineTimeConfirm = (date: Date) => {
+    const newDate = new Date(rsvpDeadlineDate);
+    newDate.setHours(date.getHours(), date.getMinutes());
+    setRsvpDeadlineDate(newDate);
+    setShowRsvpDeadlineTimePicker(false);
+  };
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
 
@@ -235,6 +270,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
         capacity: data.capacity ? Number(data.capacity) : undefined,
         skill_level_settings: skillSettings,
         gender_settings: genderSettingsData,
+        rsvp_deadline: rsvpDeadlineEnabled ? rsvpDeadlineDate.toISOString() : undefined,
       };
       logger.log('[EventCreate] Creating event');
 
@@ -681,6 +717,67 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
           )}
         </Card>
 
+        {/* Section: RSVP Deadline */}
+        <Card variant="default" style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Clock size={18} color={colors.primary} style={styles.sectionIconStyle} />
+            <Text style={styles.sectionTitle}>参加締め切り</Text>
+          </View>
+
+          {/* 参加締め切り有効化トグル */}
+          <TouchableOpacity
+            style={styles.optionRow}
+            activeOpacity={0.7}
+            onPress={() => setRsvpDeadlineEnabled(!rsvpDeadlineEnabled)}
+          >
+            <View style={styles.optionInfo}>
+              <Text style={styles.optionTitle}>参加締め切りを設定する</Text>
+              <Text style={styles.optionDescription}>
+                締め切り後は参加受付を自動で終了します
+              </Text>
+            </View>
+            <Switch
+              value={rsvpDeadlineEnabled}
+              onValueChange={setRsvpDeadlineEnabled}
+              trackColor={{ false: colors.gray[300], true: colors.primaryLight }}
+              thumbColor={rsvpDeadlineEnabled ? colors.primary : colors.gray[100]}
+            />
+          </TouchableOpacity>
+
+          {/* 締め切り日時設定 */}
+          {rsvpDeadlineEnabled && (
+            <View style={styles.rsvpDeadlineContainer}>
+              <View style={styles.dateTimeContainer}>
+                <View style={styles.dateTimeItem}>
+                  <Text style={styles.inputLabel}>締め切り日</Text>
+                  <TouchableOpacity
+                    style={styles.dateTimeButton}
+                    activeOpacity={0.7}
+                    onPress={() => setShowRsvpDeadlineDatePicker(true)}
+                  >
+                    <Calendar size={16} color={colors.gray[500]} style={styles.dateTimeIconStyle} />
+                    <Text style={styles.dateTimeText}>{formatDate(rsvpDeadlineDate)}</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.dateTimeItem}>
+                  <Text style={styles.inputLabel}>締め切り時間</Text>
+                  <TouchableOpacity
+                    style={styles.dateTimeButton}
+                    activeOpacity={0.7}
+                    onPress={() => setShowRsvpDeadlineTimePicker(true)}
+                  >
+                    <Clock size={16} color={colors.gray[500]} style={styles.dateTimeIconStyle} />
+                    <Text style={styles.dateTimeText}>{formatTime(rsvpDeadlineDate)}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <Text style={styles.rsvpDeadlineHint}>
+                この日時を過ぎると、新規参加や出欠変更ができなくなります。締め切り後、出席予定者は自動的にチェックイン対象になります。
+              </Text>
+            </View>
+          )}
+        </Card>
+
         {/* Submit Button */}
         <View style={styles.submitContainer}>
           <Button
@@ -709,6 +806,24 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
         value={selectedDate}
         onConfirm={handleTimeConfirm}
         onCancel={() => setShowTimePicker(false)}
+      />
+
+      {/* RSVP Deadline Date Picker Modal */}
+      <DateTimePicker
+        visible={showRsvpDeadlineDatePicker}
+        mode="date"
+        value={rsvpDeadlineDate}
+        onConfirm={handleRsvpDeadlineDateConfirm}
+        onCancel={() => setShowRsvpDeadlineDatePicker(false)}
+      />
+
+      {/* RSVP Deadline Time Picker Modal */}
+      <DateTimePicker
+        visible={showRsvpDeadlineTimePicker}
+        mode="time"
+        value={rsvpDeadlineDate}
+        onConfirm={handleRsvpDeadlineTimeConfirm}
+        onCancel={() => setShowRsvpDeadlineTimePicker(false)}
       />
 
       {/* Copy from Past Event Modal */}
@@ -1070,6 +1185,19 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     color: colors.gray[600],
     marginLeft: spacing.xs,
+  },
+  // 参加締め切り設定
+  rsvpDeadlineContainer: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[100],
+  },
+  rsvpDeadlineHint: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+    marginTop: spacing.md,
+    lineHeight: typography.fontSize.sm * 1.6,
   },
   // Modal styles
   modalOverlay: {
