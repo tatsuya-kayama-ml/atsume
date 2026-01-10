@@ -47,7 +47,7 @@ const eventSchema = z.object({
     .min(1, 'イベント名を入力してください')
     .max(20, 'イベント名は20文字以内で入力してください'),
   description: z.string().max(200, '説明は200文字以内で入力してください').optional(),
-  location: z.string().min(1, '場所を入力してください').max(30, '場所は30文字以内で入力してください'),
+  location: z.string().max(30, '場所は30文字以内で入力してください').optional(),
   fee: z
     .string()
     .optional()
@@ -179,7 +179,7 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
         name: data.name,
         description: data.description || null,
         date_time: selectedDate.toISOString(),
-        location: data.location,
+        location: data.location || '未定',
         fee: data.fee ? Number(data.fee) : 0,
         capacity: data.capacity ? Number(data.capacity) : null,
         skill_level_settings: skillSettings,
@@ -315,8 +315,8 @@ export const EventEditScreen: React.FC<Props> = ({ navigation, route }) => {
             name="location"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="場所"
-                placeholder="例: 〇〇体育館"
+                label="場所（任意）"
+                placeholder="例: 〇〇体育館（空欄の場合は「未定」）"
                 value={value}
                 onChangeText={onChange}
                 onBlur={onBlur}

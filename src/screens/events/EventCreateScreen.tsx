@@ -358,14 +358,13 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
             name="location"
             render={({ field: { onChange, onBlur, value } }) => (
               <Input
-                label="場所"
-                placeholder="例: ○○体育館"
+                label="場所（任意）"
+                placeholder="例: ○○体育館（空欄の場合は「未定」）"
                 value={value}
                 onChangeText={onChange}
                 onBlur={onBlur}
                 error={errors.location?.message}
                 variant="filled"
-                required
               />
             )}
           />
