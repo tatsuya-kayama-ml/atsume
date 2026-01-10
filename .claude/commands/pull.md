@@ -1,3 +1,7 @@
+---
+description: リモートから最新の変更を取得
+---
+
 # Jujutsu Sync Command
 
 リモートリポジトリから最新の変更を取得し、同期します。

@@ -1,3 +1,7 @@
+---
+description: jjで変更をリモートにプッシュ
+---
+
 # Jujutsu Push Command
 
 ローカルの変更をリモートリポジトリにプッシュします。

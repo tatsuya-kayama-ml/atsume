@@ -1,3 +1,7 @@
+---
+description: jjで変更にメッセージを追加
+---
+
 # Jujutsu Describe Command
 
 現在の変更にメッセージを追加します（jjでは変更は自動的に記録されるため、明示的なコミットは不要）。
