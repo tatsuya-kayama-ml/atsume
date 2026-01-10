@@ -67,10 +67,12 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
   }, []);
 
   const minutes = useMemo(() => {
-    // 30分単位で選択
+    // 15分単位で選択
     return [
       { label: '00', value: 0 },
+      { label: '15', value: 15 },
       { label: '30', value: 30 },
+      { label: '45', value: 45 },
     ];
   }, []);
 
@@ -158,7 +160,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
                 <Text style={styles.timeSeparator}>:</Text>
                 <WheelPicker
                   items={minutes}
-                  selectedValue={tempDate.getMinutes() < 15 ? 0 : tempDate.getMinutes() < 45 ? 30 : 0}
+                  selectedValue={Math.round(tempDate.getMinutes() / 15) * 15 % 60}
                   onValueChange={handleMinuteChange}
                   width={80}
                 />
