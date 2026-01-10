@@ -91,7 +91,7 @@ export const EventCreateScreen: React.FC<Props> = ({ navigation }) => {
   const { showToast } = useToast();
   const [selectedDate, setSelectedDate] = useState(() => {
     const date = new Date();
-    date.setHours(0, 0, 0, 0);
+    date.setHours(12, 0, 0, 0);
     return date;
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
