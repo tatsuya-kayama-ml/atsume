@@ -33,6 +33,7 @@ import {
   Banknote,
   Ticket,
   Link,
+  Lock,
   Edit,
   Trash2,
   Loader,
@@ -105,27 +106,16 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: `${currentEvent.name}\n\n日時: ${fullDate} ${time}\n場所: ${currentEvent.location}\n参加費: ¥${currentEvent.fee.toLocaleString()}\n\n参加はこちらから:\n${currentEvent.invite_link}`,
+        message: `${currentEvent.name}\n\n日時: ${fullDate} ${time}\n場所: ${currentEvent.location}\n参加費: ¥${currentEvent.fee.toLocaleString()}\n\n招待コード: ${currentEvent.event_code}`,
       });
     } catch (error) {
       logger.error('Share failed:', error);
     }
   };
 
-  const handleCopyLink = async () => {
+  const handleCopyCode = async () => {
     try {
-      await Clipboard.setStringAsync(currentEvent.invite_link);
-      showToast('リンクをコピーしました', 'success');
-    } catch (error) {
-      showToast('コピーに失敗しました', 'error');
-    }
-  };
-
-  const handleCopyDetail = async () => {
-    try {
-      const detail = `${currentEvent.name}\n\n日時: ${fullDate} ${time}\n場所: ${currentEvent.location}\n参加費: ¥${currentEvent.fee.toLocaleString()}\n\n参加はこちらから:\n${currentEvent.invite_link}`;
-      await Clipboard.setStringAsync(detail);
-      showToast('詳細をコピーしました', 'success');
+      await Clipboard.setStringAsync(currentEvent.event_code);
     } catch (error) {
       showToast('コピーに失敗しました', 'error');
     }
@@ -306,13 +296,13 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         )}
       </Card>
 
-      {/* Invite Link Card (Organizer Only) */}
+      {/* Invite Card (Organizer Only) */}
       {isOrganizer && (
         <Card variant="elevated" style={styles.inviteCard}>
           <View style={styles.inviteHeader}>
             <View>
-              <Text style={styles.inviteTitle}>招待リンク</Text>
-              <Text style={styles.inviteSubtitle}>リンクをコピーして参加者に共有</Text>
+              <Text style={styles.inviteTitle}>招待コード</Text>
+              <Text style={styles.inviteSubtitle}>タップでコピー・共有できます</Text>
             </View>
             <View style={styles.inviteBadge}>
               <Text style={styles.inviteBadgeText}>主催者</Text>
@@ -321,10 +311,10 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
           <TouchableOpacity
             style={styles.codeContainer}
-            onPress={handleCopyLink}
+            onPress={handleCopyCode}
             activeOpacity={0.7}
           >
-            <Text style={styles.linkText} numberOfLines={1}>{currentEvent.invite_link}</Text>
+            <Text style={styles.codeText}>{currentEvent.event_code}</Text>
             <View style={styles.copyIconContainer}>
               <Copy size={16} color={colors.primary} />
               <Text style={styles.copyHint}>タップでコピー</Text>
@@ -333,33 +323,43 @@ const EventInfoTab: React.FC<{ eventId: string }> = ({ eventId }) => {
 
           <View style={styles.inviteButtonsRow}>
             <TouchableOpacity
-              style={styles.inviteButtonTertiary}
-              onPress={handleCopyLink}
+              style={styles.inviteButtonSecondary}
+              onPress={handleCopyCode}
               activeOpacity={0.7}
             >
-              <Link size={14} color={colors.primary} />
-              <Text style={styles.inviteButtonTertiaryText}>リンク</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.inviteButtonTertiary}
-              onPress={handleCopyDetail}
-              activeOpacity={0.7}
-            >
-              <Copy size={14} color={colors.primary} />
-              <Text style={styles.inviteButtonTertiaryText}>詳細</Text>
+              <Copy size={16} color={colors.primary} />
+              <Text style={styles.inviteButtonSecondaryText}>コピー</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.inviteButtonPrimary}
               onPress={handleShare}
               activeOpacity={0.7}
             >
-              <Link size={14} color={colors.white} />
-              <Text style={styles.inviteButtonPrimaryText}>共有</Text>
+              <Link size={16} color={colors.white} />
+              <Text style={styles.inviteButtonPrimaryText}>共有する</Text>
             </TouchableOpacity>
           </View>
         </Card>
       )}
 
+      {/* Password Info - Show to organizer and participants */}
+      {currentEvent.password_hash && (
+        <Card variant="outlined" style={styles.passwordCard}>
+          <View style={styles.passwordHeader}>
+            <Lock size={20} color={colors.gray[500]} style={styles.passwordIconStyle} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.passwordTitle}>参加パスワード設定済み</Text>
+              <Text style={styles.passwordSubtitle}>参加時にパスワードが必要です</Text>
+              {currentEvent.password && (isOrganizer || participants.some(p => p.user_id === user?.id)) && (
+                <View style={styles.passwordDisplayRow}>
+                  <Text style={styles.passwordLabel}>パスワード:</Text>
+                  <Text style={styles.passwordValue}>{currentEvent.password}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </Card>
+      )}
     </ScrollView>
   );
 };
@@ -871,8 +871,6 @@ const RegistrationTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         isOwnParticipation={selectedParticipant?.user_id === user?.id}
         skillLevelSettings={currentEvent?.skill_level_settings}
         genderSettings={currentEvent?.gender_settings}
-        hidePaymentInfo={true}
-        hideActualAttendance={true}
         onUpdate={handleUpdateParticipant}
         onRemove={handleRemoveParticipant}
         onUpdateRsvp={handleStatusChange}
@@ -1921,7 +1919,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
         <View style={styles.paymentGroup}>
           <View style={styles.paymentGroupHeader}>
             <View style={[styles.groupIndicator, { backgroundColor: colors.success }]} />
-            <Text style={styles.paymentGroupTitle}>支払い済み</Text>
+            <Text style={styles.paymentGroupTitle}>支払済</Text>
             <Text style={styles.paymentGroupCount}>{paidParticipants.length}人</Text>
           </View>
           {paidParticipants.map((participant) => {
@@ -2575,11 +2573,6 @@ const styles = StyleSheet.create({
     color: colors.primary,
     letterSpacing: 6,
   },
-  linkText: {
-    fontSize: typography.fontSize.base,
-    fontWeight: '600',
-    color: colors.primary,
-  },
   copyIconContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2611,41 +2604,69 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primary,
   },
-  inviteButtonTertiary: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.gray[50],
-    borderWidth: 1,
-    borderColor: colors.gray[200],
-  },
-  inviteButtonTertiaryText: {
-    fontSize: typography.fontSize.sm,
-    fontWeight: '600',
-    color: colors.primary,
-  },
   inviteButtonPrimary: {
-    flex: 1,
+    flex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xs,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
     borderRadius: borderRadius.lg,
     backgroundColor: colors.primary,
     ...shadows.primary,
   },
   inviteButtonPrimaryText: {
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.base,
     fontWeight: '600',
     color: colors.white,
   },
   buttonIcon: {
     fontSize: 16,
+  },
+
+  // Password Card
+  passwordCard: {
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  passwordHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  passwordIcon: {
+    fontSize: 24,
+    marginRight: spacing.md,
+  },
+  passwordIconStyle: {
+    marginRight: spacing.md,
+  },
+  passwordTitle: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '600',
+    color: colors.gray[900],
+  },
+  passwordSubtitle: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[500],
+  },
+  passwordDisplayRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[200],
+  },
+  passwordLabel: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[600],
+    marginRight: spacing.xs,
+  },
+  passwordValue: {
+    fontSize: typography.fontSize.base,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 1,
   },
 
   // Join Event Card

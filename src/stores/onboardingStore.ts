@@ -41,12 +41,12 @@ export const TOOLTIP_CONTENT: Record<TooltipId, { title: string; message: string
   // 参加者向けヒント
   participant_attendance: {
     title: '出欠を報告しよう',
-    message: '参加・不参加・未定をタップして報告してください。主催者に通知されます。',
+    message: '出席予定・欠席・未定をタップして報告してください。主催者に通知されます。',
     role: 'participant',
   },
   participant_payment: {
     title: '支払いを報告',
-    message: '参加費を払ったら「支払い済み」をタップ。主催者が確認してくれます。',
+    message: '参加費を払ったら「支払済」をタップ。主催者が確認してくれます。',
     role: 'participant',
   },
   // 主催者向け - チーム機能

@@ -58,6 +58,7 @@ interface CreateEventData {
   location: string;
   fee: number;
   capacity?: number;
+  rsvp_deadline?: string | null;
   skill_level_settings?: SkillLevelSettings;
   gender_settings?: GenderSettings;
   rsvp_deadline?: string;
@@ -174,6 +175,7 @@ export const useEventStore = create<EventState>((set, get) => ({
         invite_link: inviteLink,
         status: 'open' as EventStatus,
         timer_position: 'bottom',
+        rsvp_deadline: data.rsvp_deadline || null,
         skill_level_settings: data.skill_level_settings || null,
         gender_settings: data.gender_settings || null,
         rsvp_deadline: data.rsvp_deadline || null,
@@ -807,6 +809,14 @@ export const useEventStore = create<EventState>((set, get) => ({
       const newDate = new Date(originalDate);
       newDate.setDate(newDate.getDate() + 7);
 
+      const newRsvpDeadline = originalEvent.rsvp_deadline
+        ? (() => {
+            const deadline = new Date(originalEvent.rsvp_deadline);
+            deadline.setDate(deadline.getDate() + 7);
+            return deadline.toISOString();
+          })()
+        : null;
+
       // 新しいイベントを作成（参加者はコピーしない）
       const eventCode = generateEventCode();
       const inviteLink = `atsume://event/${eventCode}`;
@@ -822,6 +832,9 @@ export const useEventStore = create<EventState>((set, get) => ({
         event_code: eventCode,
         invite_link: inviteLink,
         status: 'open' as const,
+        rsvp_deadline: newRsvpDeadline,
+        rsvp_closed: false,
+        rsvp_closed_at: null,
         skill_level_settings: originalEvent.skill_level_settings,
         gender_settings: originalEvent.gender_settings,
       };

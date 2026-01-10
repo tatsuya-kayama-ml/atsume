@@ -49,7 +49,7 @@ async function runUseCaseTests() {
 
         const content = await page.content();
         const checks = {
-          '名前入力欄': content.includes('名前') || content.includes('ユーザー名'),
+          '名前入力欄': content.includes('名前') || content.includes('ユーザー名') || content.includes('表示名'),
           'メールアドレス入力欄': content.includes('メールアドレス') || content.includes('email'),
           'パスワード入力欄': content.includes('パスワード'),
           'アカウント作成ボタン': content.includes('アカウント作成') || content.includes('登録'),
