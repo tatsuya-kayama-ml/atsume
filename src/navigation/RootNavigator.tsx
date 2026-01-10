@@ -3,7 +3,7 @@ import { ActivityIndicator, View, StyleSheet, Platform, Pressable } from 'react-
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator, NativeStackNavigationOptions } from '@react-navigation/native-stack';
 import * as Linking from 'expo-linking';
-import { ChevronLeft, Home } from 'lucide-react-native';
+import { ChevronLeft } from 'lucide-react-native';
 import { AuthNavigator } from './AuthNavigator';
 import { MainNavigatorWithTimer } from './MainNavigator';
 import { EventCreateScreen, EventDetailScreen, EventEditScreen, JoinEventScreen } from '../screens/events';
@@ -208,11 +208,7 @@ export const RootNavigator: React.FC = () => {
                       }}
                       style={{ paddingRight: 8, paddingVertical: 8 }}
                     >
-                      {canGoBack ? (
-                        <ChevronLeft size={24} color={colors.primary} />
-                      ) : (
-                        <Home size={22} color={colors.primary} />
-                      )}
+                      <ChevronLeft size={24} color={colors.primary} />
                     </Pressable>
                   );
                 },
