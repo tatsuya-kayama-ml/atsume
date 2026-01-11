@@ -10,8 +10,8 @@ description: リモートから最新の変更を取得
 
 1. `jj status` で現在の状態を確認
 2. `jj git fetch` でリモートの最新情報を取得
-3. `jj log -r 'main..main@origin'` で新しいリビジョンを表示
-4. `jj rebase -d main@origin` で現在の作業をリベース
+3. `jj log -r 'master..master@origin'` で新しいリビジョンを表示
+4. `jj rebase -d master@origin` で現在の作業をリベース
 
 ## コンフリクト発生時
 

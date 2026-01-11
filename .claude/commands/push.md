@@ -9,7 +9,7 @@ description: jjで変更をリモートにプッシュ
 ## 手順
 
 1. `jj status` で現在の状態を確認
-2. `jj log -r 'main@origin..main'` でプッシュ予定のリビジョンを表示
+2. `jj log -r 'master@origin..@'` でプッシュ予定のリビジョンを表示
 3. 現在のリビジョンにメッセージがない場合は、`jj describe` でメッセージを追加
 4. `jj git push` でプッシュを実行
 
@@ -17,7 +17,7 @@ description: jjで変更をリモートにプッシュ
 
 リモートが先に進んでいる場合:
 1. `jj git fetch` でリモートの最新情報を取得
-2. `jj rebase -d main@origin` でリベース
+2. `jj rebase -d master@origin` でリベース
 3. 再度 `jj git push` を実行
 
 ## 注意事項

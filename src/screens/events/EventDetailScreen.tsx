@@ -1325,6 +1325,17 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     { key: 'other' as const, label: 'その他', icon: '📝' },
   ];
 
+  // Clear input when payment type changes (except when editing)
+  const handlePaymentTypeChange = (type: 'paypay' | 'bank' | 'other') => {
+    if (type !== selectedPaymentType) {
+      setSelectedPaymentType(type);
+      if (!editingMethodId) {
+        setMethodInput('');
+        setCustomLabelInput('');
+      }
+    }
+  };
+
   // Swipe-to-dismiss animation for payment modal
   const paymentModalTranslateY = useRef(new Animated.Value(0)).current;
   const paymentBackdropOpacity = useRef(new Animated.Value(0)).current;
@@ -1491,7 +1502,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
     setShowPaymentMethodModal(true);
   };
 
-  const handleSavePaymentMethod = async () => {
+  const handleSavePaymentMethod = async (continueAdding: boolean = false) => {
     const value = methodInput.trim();
     if (!value) {
       showToast('支払い情報を入力してください', 'error');
@@ -1527,6 +1538,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
           value: value,
         });
         showToast('支払い方法を更新しました', 'success');
+        closePaymentModal();
       } else {
         // Add new method
         await addPaymentMethod(eventId, {
@@ -1535,8 +1547,21 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
           value: value,
         });
         showToast('支払い方法を追加しました', 'success');
+
+        if (continueAdding) {
+          // Reset form for next entry
+          setMethodInput('');
+          setCustomLabelInput('');
+          // Move to next payment type automatically
+          if (selectedPaymentType === 'paypay') {
+            setSelectedPaymentType('bank');
+          } else if (selectedPaymentType === 'bank') {
+            setSelectedPaymentType('other');
+          }
+        } else {
+          closePaymentModal();
+        }
       }
-      closePaymentModal();
     } catch (error: any) {
       showToast(error.message || '保存に失敗しました', 'error');
     } finally {
@@ -1847,6 +1872,42 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
             </View>
 
             <View style={styles.modalBody}>
+              {/* 登録済み支払い方法の表示 */}
+              {paymentMethods.length > 0 && (
+                <View style={styles.registeredMethodsSection}>
+                  <Text style={styles.registeredMethodsTitle}>登録済み</Text>
+                  <View style={styles.registeredMethodsList}>
+                    {paymentMethods.map((method) => {
+                      const icon = PAYMENT_TYPE_OPTIONS.find(o => o.key === method.type)?.icon || '📝';
+                      const isEditing = editingMethodId === method.id;
+                      return (
+                        <View
+                          key={method.id}
+                          style={[
+                            styles.registeredMethodChip,
+                            isEditing && styles.registeredMethodChipEditing,
+                          ]}
+                        >
+                          <Text style={styles.registeredMethodIcon}>{icon}</Text>
+                          <Text
+                            style={[
+                              styles.registeredMethodLabel,
+                              isEditing && styles.registeredMethodLabelEditing,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {method.label}
+                          </Text>
+                          {isEditing && (
+                            <Text style={styles.editingBadge}>編集中</Text>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>支払い方法</Text>
                 <View style={styles.paymentTypeOptions}>
@@ -1857,7 +1918,7 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                         styles.paymentTypeOption,
                         selectedPaymentType === option.key && styles.paymentTypeOptionActive,
                       ]}
-                      onPress={() => setSelectedPaymentType(option.key)}
+                      onPress={() => handlePaymentTypeChange(option.key)}
                     >
                       <Text style={styles.paymentTypeIcon}>{option.icon}</Text>
                       <Text
@@ -1952,16 +2013,30 @@ const PaymentTab: React.FC<{ eventId: string }> = ({ eventId }) => {
                 >
                   <Text style={styles.modalCancelButtonText}>キャンセル</Text>
                 </TouchableOpacity>
+                {!editingMethodId && (
+                  <TouchableOpacity
+                    style={[
+                      styles.modalContinueButton,
+                      isSavingMethod && styles.modalSaveButtonDisabled,
+                    ]}
+                    onPress={() => handleSavePaymentMethod(true)}
+                    disabled={isSavingMethod}
+                  >
+                    <Text style={styles.modalContinueButtonText}>
+                      保存して続けて追加
+                    </Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={[
                     styles.modalSaveButton,
                     isSavingMethod && styles.modalSaveButtonDisabled,
                   ]}
-                  onPress={handleSavePaymentMethod}
+                  onPress={() => handleSavePaymentMethod(false)}
                   disabled={isSavingMethod}
                 >
                   <Text style={styles.modalSaveButtonText}>
-                    {isSavingMethod ? '保存中...' : '保存'}
+                    {isSavingMethod ? '保存中...' : (editingMethodId ? '更新' : '保存')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -3766,6 +3841,57 @@ const styles = StyleSheet.create({
   modalBody: {
     padding: spacing.lg,
   },
+  registeredMethodsSection: {
+    marginBottom: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[200],
+  },
+  registeredMethodsTitle: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: '600',
+    color: colors.gray[500],
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  registeredMethodsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  registeredMethodChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.gray[100],
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    gap: 4,
+  },
+  registeredMethodChipEditing: {
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  registeredMethodIcon: {
+    fontSize: 14,
+  },
+  registeredMethodLabel: {
+    fontSize: typography.fontSize.sm,
+    color: colors.gray[700],
+    maxWidth: 100,
+  },
+  registeredMethodLabelEditing: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  editingBadge: {
+    fontSize: typography.fontSize.xs,
+    color: colors.primary,
+    fontWeight: '600',
+    marginLeft: 2,
+  },
   inputGroup: {
     marginBottom: spacing.md,
   },
@@ -3858,6 +3984,19 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     fontWeight: '600',
     color: colors.white,
+  },
+  modalContinueButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.gray[100],
+    borderWidth: 1,
+    borderColor: colors.gray[300],
+  },
+  modalContinueButtonText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: '600',
+    color: colors.gray[700],
   },
   // Payment type selector styles
   paymentTypeOptions: {
